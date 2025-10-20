@@ -1,5 +1,4 @@
 import { getPointer, isKeyDown } from '../engine/input';
-import { clamp } from '../utils/math';
 
 const VIRTUAL_WIDTH = 360;
 const VIRTUAL_HEIGHT = 640;
@@ -8,35 +7,23 @@ export interface Player {
   x: number;
   y: number;
   r: number;
-  tx: number;
-  ty: number;
   speedMax: number;
 }
 
-export const createPlayer = (): Player => {
-  const startX = VIRTUAL_WIDTH / 2;
-  const startY = 520;
-
-  return {
-    x: startX,
-    y: startY,
-    r: 14,
-    tx: startX,
-    ty: startY,
-    speedMax: 220,
-  };
-};
+export const createPlayer = (): Player => ({
+  x: VIRTUAL_WIDTH / 2,
+  y: VIRTUAL_HEIGHT * 0.8,
+  r: 14,
+  speedMax: 220,
+});
 
 export const updatePlayer = (player: Player, dt: number): void => {
   const pointer = getPointer();
 
   if (pointer.active) {
-    player.tx = clamp(pointer.x, player.r, VIRTUAL_WIDTH - player.r);
-    player.ty = clamp(pointer.y, player.r, VIRTUAL_HEIGHT - player.r);
-
     const follow = 1 - Math.exp(-dt * 14);
-    player.x += (player.tx - player.x) * follow;
-    player.y += (player.ty - player.y) * follow;
+    player.x += (pointer.x - player.x) * follow;
+    player.y += (pointer.y - player.y) * follow;
   } else {
     let dx = 0;
     let dy = 0;
@@ -62,15 +49,10 @@ export const updatePlayer = (player: Player, dt: number): void => {
       player.x += dx * player.speedMax * dt;
       player.y += dy * player.speedMax * dt;
     }
-
-    player.tx = player.x;
-    player.ty = player.y;
   }
 
-  player.x = clamp(player.x, player.r, VIRTUAL_WIDTH - player.r);
-  player.y = clamp(player.y, player.r, VIRTUAL_HEIGHT - player.r);
-  player.tx = clamp(player.tx, player.r, VIRTUAL_WIDTH - player.r);
-  player.ty = clamp(player.ty, player.r, VIRTUAL_HEIGHT - player.r);
+  player.x = Math.max(player.r, Math.min(VIRTUAL_WIDTH - player.r, player.x));
+  player.y = Math.max(player.r, Math.min(VIRTUAL_HEIGHT - player.r, player.y));
 };
 
 export const drawPlayer = (

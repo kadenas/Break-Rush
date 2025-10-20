@@ -1,56 +1,43 @@
-import { clamp } from '../utils/math';
+const VW = 360;
+const VH = 640;
 
-const VIRTUAL_WIDTH = 360;
-const VIRTUAL_HEIGHT = 640;
-
-type PointerState = {
+export type PointerState = {
   active: boolean;
   x: number;
   y: number;
 };
 
-export interface Layout {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
-  dpr: number;
-  cssW: number;
-  cssH: number;
-}
-
-let pointerState: PointerState = {
+const pointer: PointerState = {
   active: false,
-  x: VIRTUAL_WIDTH / 2,
-  y: (VIRTUAL_HEIGHT * 4) / 5,
+  x: VW / 2,
+  y: (VH * 4) / 5,
 };
-
-let activePointerId: number | null = null;
-let attachedCanvas: HTMLCanvasElement | null = null;
-let layoutGetter: (() => Layout) | null = null;
-
-let handlePointerDown: ((event: PointerEvent) => void) | null = null;
-let handlePointerMove: ((event: PointerEvent) => void) | null = null;
-let handlePointerUp: ((event: PointerEvent) => void) | null = null;
 
 const pressedKeys = new Set<string>();
 let keyboardAttached = false;
 
-const ensureKeyboardListeners = (): void => {
+let canvasRef: HTMLCanvasElement | null = null;
+let pointerDownHandler: ((event: PointerEvent) => void) | null = null;
+let pointerMoveHandler: ((event: PointerEvent) => void) | null = null;
+let pointerUpHandler: ((event: PointerEvent) => void) | null = null;
+
+let activePointerId: number | null = null;
+let lastClientX: number | null = null;
+let lastClientY: number | null = null;
+
+let visualViewportAttached = false;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function ensureKeyboardListeners(): void {
   if (keyboardAttached) {
     return;
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {
     pressedKeys.add(event.code);
-
-    if (
-      event.code === 'ArrowUp' ||
-      event.code === 'ArrowDown' ||
-      event.code === 'ArrowLeft' ||
-      event.code === 'ArrowRight'
-    ) {
-      event.preventDefault();
-    }
   };
 
   const onKeyUp = (event: KeyboardEvent): void => {
@@ -61,145 +48,188 @@ const ensureKeyboardListeners = (): void => {
     pressedKeys.clear();
   };
 
-  window.addEventListener('keydown', onKeyDown, { passive: false });
+  window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
 
   keyboardAttached = true;
-};
+}
 
-const detachPointerListeners = (): void => {
-  if (!attachedCanvas) {
-    return;
-  }
-  if (handlePointerDown) {
-    attachedCanvas.removeEventListener('pointerdown', handlePointerDown);
-  }
-  if (handlePointerMove) {
-    attachedCanvas.removeEventListener('pointermove', handlePointerMove);
-  }
-  if (handlePointerUp) {
-    attachedCanvas.removeEventListener('pointerup', handlePointerUp);
-    attachedCanvas.removeEventListener('pointercancel', handlePointerUp);
-    attachedCanvas.removeEventListener('pointerout', handlePointerUp);
-  }
-  handlePointerDown = null;
-  handlePointerMove = null;
-  handlePointerUp = null;
-  attachedCanvas = null;
-  activePointerId = null;
-  pointerState = {
-    active: false,
-    x: VIRTUAL_WIDTH / 2,
-    y: (VIRTUAL_HEIGHT * 4) / 5,
-  };
-  layoutGetter = null;
-};
-
-export function clientToVirtual(
+function clientToVirtual(
+  canvas: HTMLCanvasElement,
   clientX: number,
-  clientY: number,
-  layout: Layout
+  clientY: number
 ): { x: number; y: number } {
-  const safeScale = layout.scale || layout.cssW / VIRTUAL_WIDTH || 1;
-  const virtualX = (clientX - layout.offsetX) / safeScale;
-  const virtualY = (clientY - layout.offsetY) / safeScale;
+  const rect = canvas.getBoundingClientRect();
+  const width = rect.width || 1;
+  const height = rect.height || 1;
+
+  let cssX = clientX - rect.left;
+  let cssY = clientY - rect.top;
+
+  cssX = clamp(cssX, 0, width);
+  cssY = clamp(cssY, 0, height);
+
+  const virtualX = (cssX / width) * VW;
+  const virtualY = (cssY / height) * VH;
 
   return {
-    x: clamp(virtualX, 0, VIRTUAL_WIDTH),
-    y: clamp(virtualY, 0, VIRTUAL_HEIGHT),
+    x: clamp(virtualX, 0, VW),
+    y: clamp(virtualY, 0, VH),
   };
 }
 
-export const initInput = (
-  canvas: HTMLCanvasElement,
-  getLayout: () => Layout
-): void => {
-  if (attachedCanvas === canvas) {
-    layoutGetter = getLayout;
-    ensureKeyboardListeners();
+function updatePointerFromEvent(event: PointerEvent): void {
+  if (!canvasRef) {
+    return;
+  }
+
+  lastClientX = event.clientX;
+  lastClientY = event.clientY;
+
+  const { x, y } = clientToVirtual(canvasRef, event.clientX, event.clientY);
+  pointer.x = x;
+  pointer.y = y;
+}
+
+function attachVisualViewportListeners(): void {
+  if (visualViewportAttached) {
+    return;
+  }
+
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    visualViewportAttached = true;
+    return;
+  }
+
+  const handleViewportChange = (): void => {
+    if (!canvasRef) {
+      return;
+    }
+    if (!pointer.active) {
+      return;
+    }
+    if (lastClientX === null || lastClientY === null) {
+      return;
+    }
+
+    const { x, y } = clientToVirtual(canvasRef, lastClientX, lastClientY);
+    pointer.x = x;
+    pointer.y = y;
+  };
+
+  viewport.addEventListener('resize', handleViewportChange);
+  viewport.addEventListener('scroll', handleViewportChange);
+
+  visualViewportAttached = true;
+}
+
+function detachPointerListeners(): void {
+  if (!canvasRef) {
+    return;
+  }
+
+  if (pointerDownHandler) {
+    canvasRef.removeEventListener('pointerdown', pointerDownHandler);
+  }
+  if (pointerMoveHandler) {
+    canvasRef.removeEventListener('pointermove', pointerMoveHandler);
+  }
+  if (pointerUpHandler) {
+    canvasRef.removeEventListener('pointerup', pointerUpHandler);
+    canvasRef.removeEventListener('pointercancel', pointerUpHandler);
+    canvasRef.removeEventListener('pointerleave', pointerUpHandler);
+    canvasRef.removeEventListener('pointerout', pointerUpHandler);
+  }
+
+  pointerDownHandler = null;
+  pointerMoveHandler = null;
+  pointerUpHandler = null;
+  canvasRef = null;
+  activePointerId = null;
+  lastClientX = null;
+  lastClientY = null;
+  pointer.active = false;
+}
+
+export function initInput(canvas: HTMLCanvasElement): void {
+  ensureKeyboardListeners();
+  attachVisualViewportListeners();
+
+  if (canvasRef === canvas) {
     return;
   }
 
   detachPointerListeners();
-  ensureKeyboardListeners();
 
-  attachedCanvas = canvas;
-  layoutGetter = getLayout;
+  canvasRef = canvas;
+  canvasRef.style.touchAction = 'none';
+  canvasRef.style.userSelect = 'none';
 
-  handlePointerDown = (event: PointerEvent): void => {
-    if (!attachedCanvas || !layoutGetter) {
+  pointerDownHandler = (event: PointerEvent): void => {
+    if (!canvasRef) {
       return;
     }
 
-    if (activePointerId !== null && activePointerId !== event.pointerId) {
-      return;
-    }
-
-    const layout = layoutGetter();
-    const { x, y } = clientToVirtual(event.clientX, event.clientY, layout);
-
-    pointerState = {
-      active: true,
-      x,
-      y,
-    };
     activePointerId = event.pointerId;
+    pointer.active = true;
+    updatePointerFromEvent(event);
 
     try {
-      attachedCanvas.setPointerCapture(event.pointerId);
+      canvasRef.setPointerCapture(event.pointerId);
     } catch {
-      // ignore platforms without pointer capture
+      // ignore if pointer capture is not supported
     }
 
     event.preventDefault();
   };
 
-  handlePointerMove = (event: PointerEvent): void => {
-    if (!attachedCanvas || !layoutGetter) {
+  pointerMoveHandler = (event: PointerEvent): void => {
+    if (!canvasRef) {
       return;
     }
 
-    if (pointerState.active && activePointerId === event.pointerId) {
-      const layout = layoutGetter();
-      const { x, y } = clientToVirtual(event.clientX, event.clientY, layout);
-      pointerState = {
-        active: true,
-        x,
-        y,
-      };
-      event.preventDefault();
-    }
-  };
-
-  handlePointerUp = (event: PointerEvent): void => {
-    if (!attachedCanvas || !layoutGetter) {
+    if (activePointerId !== event.pointerId) {
       return;
     }
 
-    if (activePointerId === event.pointerId) {
-      pointerState = {
-        ...pointerState,
-        active: false,
-      };
-      activePointerId = null;
-      try {
-        attachedCanvas.releasePointerCapture(event.pointerId);
-      } catch {
-        // ignore if capture was not set
-      }
-      event.preventDefault();
-    }
+    updatePointerFromEvent(event);
+    event.preventDefault();
   };
 
-  const passiveFalse = { passive: false } as const;
-  canvas.addEventListener('pointerdown', handlePointerDown, passiveFalse);
-  canvas.addEventListener('pointermove', handlePointerMove as EventListener, passiveFalse);
-  canvas.addEventListener('pointerup', handlePointerUp as EventListener, passiveFalse);
-  canvas.addEventListener('pointercancel', handlePointerUp as EventListener, passiveFalse);
-  canvas.addEventListener('pointerout', handlePointerUp as EventListener, passiveFalse);
-};
+  pointerUpHandler = (event: PointerEvent): void => {
+    if (activePointerId !== event.pointerId) {
+      return;
+    }
 
-export const getPointer = (): PointerState => ({ ...pointerState });
+    pointer.active = false;
+    activePointerId = null;
+    lastClientX = event.clientX;
+    lastClientY = event.clientY;
 
-export const isKeyDown = (code: string): boolean => pressedKeys.has(code);
+    try {
+      canvasRef?.releasePointerCapture(event.pointerId);
+    } catch {
+      // ignore if capture wasn't set
+    }
+
+    event.preventDefault();
+  };
+
+  const options = { passive: false } as const;
+  canvasRef.addEventListener('pointerdown', pointerDownHandler, options);
+  canvasRef.addEventListener('pointermove', pointerMoveHandler, options);
+  canvasRef.addEventListener('pointerup', pointerUpHandler, options);
+  canvasRef.addEventListener('pointercancel', pointerUpHandler, options);
+  canvasRef.addEventListener('pointerleave', pointerUpHandler, options);
+  canvasRef.addEventListener('pointerout', pointerUpHandler, options);
+}
+
+export function getPointer(): PointerState {
+  return { ...pointer };
+}
+
+export function isKeyDown(code: string): boolean {
+  return pressedKeys.has(code);
+}

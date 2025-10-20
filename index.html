@@ -22,7 +22,7 @@
         background: #030711;
         color: #f5f5f5;
         font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-        overscroll-behavior: contain;
+        overscroll-behavior: none;
         touch-action: manipulation;
       }
 
@@ -32,6 +32,8 @@
         top: 0;
         display: block;
         touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
       }
 
       #gate {
@@ -70,10 +72,7 @@
     </style>
   </head>
   <body>
-    <canvas
-      id="game"
-      style="touch-action:none;-webkit-user-select:none;user-select:none;"
-    ></canvas>
+    <canvas id="game"></canvas>
     <div id="gate">
       <button id="gate-btn" type="button">Tap to start</button>
     </div>
