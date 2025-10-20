@@ -1,183 +1,76 @@
-import { initInput } from '../engine/input';
-import { createPlayer, drawPlayer, Player, updatePlayer } from '../game/player';
 import { getState } from './state';
+import { createPlayer, updatePlayer, drawPlayer } from '../game/player';
+import { applyRenderTransform, computeLayout, VW, VH } from '../engine/viewport';
+import { initInput } from '../engine/input';
 
-const VIRTUAL_WIDTH = 360;
-const VIRTUAL_HEIGHT = 640;
-
-let ctx: CanvasRenderingContext2D | null = null;
 let running = false;
-let rafId: number | null = null;
-let time = 0;
-let player: Player | null = null;
+let raf = 0;
+let last = 0;
+let canvas: HTMLCanvasElement;
+let ctx: CanvasRenderingContext2D;
+const player = createPlayer();
 
-export const bootGame = (canvas: HTMLCanvasElement): void => {
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return;
-  }
-
+export function bootGame(c: HTMLCanvasElement) {
+  canvas = c;
+  const g = canvas.getContext('2d');
+  if (!g) throw new Error('Canvas 2D no disponible');
+  ctx = g;
   initInput(canvas);
-
-  ctx = context;
-  player = createPlayer();
-  time = 0;
-
-  if (rafId !== null) {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-  }
-
   running = false;
-  render();
-};
+}
 
-export const startGame = (): void => {
-  if (!ctx) {
-    return;
-  }
-  if (running) {
-    return;
-  }
-
+export function startGame() {
+  if (running) return;
   running = true;
-  let lastTime = performance.now();
+  last = performance.now();
+  raf = requestAnimationFrame(loop);
+}
 
-  const loop = (now: number): void => {
-    if (!running) {
-      return;
-    }
-
-    const dt = Math.min((now - lastTime) / 1000, 0.05);
-    lastTime = now;
-
-    update(dt);
-    render();
-
-    rafId = requestAnimationFrame(loop);
-  };
-
-  update(0);
-  render();
-  rafId = requestAnimationFrame(loop);
-};
-
-export const stopGame = (): void => {
+export function stopGame() {
   running = false;
-  if (rafId !== null) {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-  }
-};
+  if (raf) cancelAnimationFrame(raf);
+}
 
-const update = (dt: number): void => {
-  time += dt;
+function loop(now: number) {
+  if (!running) return;
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  render();
+  raf = requestAnimationFrame(loop);
+}
 
-  if (!player) {
-    return;
-  }
+function update(dt: number) {
+  if (getState() === 'playing') updatePlayer(player, dt);
+}
 
-  if (getState() === 'playing') {
-    updatePlayer(player, dt);
-  }
-};
-
-const render = (): void => {
-  if (!ctx) {
-    return;
-  }
-
-  const canvas = ctx.canvas;
-  const dpr = canvas.width / VIRTUAL_WIDTH || 1;
-
-  ctx.save();
+function render() {
+  const layout = computeLayout(canvas);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.restore();
+  applyRenderTransform(ctx, layout);
 
-  ctx.fillStyle = '#041225';
-  ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+  ctx.fillStyle = '#0b1f33';
+  ctx.fillRect(0, 0, VW, VH);
 
-  const currentState = getState();
-
-  if (currentState === 'menu') {
-    drawMenu();
+  if (getState() === 'menu') {
+    ctx.fillStyle = 'rgba(150,40,40,0.45)';
+    ctx.beginPath();
+    ctx.arc(VW * 0.5, VH * 0.62, VW * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Break Rush', VW * 0.5, VH * 0.6);
+    ctx.font = '18px system-ui';
+    ctx.fillStyle = '#9cc2ff';
+    ctx.fillText('Tap para jugar', VW * 0.5, VH * 0.68);
     return;
   }
 
-  if (currentState === 'playing') {
-    drawGameplay(dpr);
-    return;
-  }
-
-  drawFallback(currentState);
-};
-
-const drawMenu = (): void => {
-  if (!ctx) {
-    return;
-  }
-
-  ctx.fillStyle = '#e2f3ff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '30px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText('Break Rush', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 - 36);
-
-  ctx.font = '18px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = '#60a5fa';
-  ctx.fillText('Tap to start', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 + 8);
-};
-
-const drawGameplay = (dpr: number): void => {
-  if (!ctx || !player) {
-    return;
-  }
-
-  ctx.save();
-
-  const glowRadius = 90;
-  const gradient = ctx.createRadialGradient(
-    VIRTUAL_WIDTH / 2,
-    VIRTUAL_HEIGHT / 2,
-    24,
-    VIRTUAL_WIDTH / 2,
-    VIRTUAL_HEIGHT / 2,
-    glowRadius
-  );
-  gradient.addColorStop(0, 'rgba(56, 189, 248, 0.15)');
-  gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-
-  ctx.globalAlpha = 0.35;
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([8, 10]);
-  ctx.beginPath();
-  ctx.moveTo(0, VIRTUAL_HEIGHT - 120 + Math.sin(time * 1.8) * 6);
-  ctx.lineTo(VIRTUAL_WIDTH, VIRTUAL_HEIGHT - 120 + Math.sin(time * 1.8) * 6);
-  ctx.stroke();
-
-  ctx.restore();
-
-  drawPlayer(ctx, player, dpr);
-
-  ctx.fillStyle = 'rgba(226, 243, 255, 0.85)';
-  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+  drawPlayer(ctx, player);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.font = '16px system-ui';
   ctx.textAlign = 'right';
-  ctx.textBaseline = 'top';
-  ctx.fillText('PLAYING', VIRTUAL_WIDTH - 12, 16);
-};
-
-const drawFallback = (state: ReturnType<typeof getState>): void => {
-  if (!ctx) {
-    return;
-  }
-
-  ctx.fillStyle = '#e2f3ff';
-  ctx.font = '24px "Segoe UI", system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(state.toUpperCase(), VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
-};
+  ctx.fillText('PLAYING', VW - 8, 22);
+}
