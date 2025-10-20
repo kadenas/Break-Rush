@@ -1,7 +1,6 @@
 import { bootGame, startGame } from './core/game';
 import { unlockAudio } from './engine/audio';
 import { setState, getState } from './core/state';
-import type { Layout } from './engine/input';
 
 declare global {
   interface Window {
@@ -36,17 +35,6 @@ let debugHudEl: HTMLDivElement | null = null;
 let debugInfoEl: HTMLDivElement | null = null;
 let debugForceBtn: HTMLButtonElement | null = null;
 
-const layout: Layout = {
-  scale: 1,
-  offsetX: 0,
-  offsetY: 0,
-  dpr: 1,
-  cssW: BASE_WIDTH,
-  cssH: BASE_HEIGHT,
-};
-
-export const getLayout = (): Layout => layout;
-
 const debugEnabled = (() => {
   if (typeof window === 'undefined') {
     return false;
@@ -72,24 +60,38 @@ function qs<T extends Element>(selector: string, root: Document | Element = docu
   return element as T;
 }
 
+function getViewportDimensions(): { width: number; height: number } {
+  const viewport = window.visualViewport;
+  if (viewport) {
+    return {
+      width: Math.max(1, Math.round(viewport.width)),
+      height: Math.max(1, Math.round(viewport.height)),
+    };
+  }
+
+  const width = Math.max(
+    window.innerWidth || document.documentElement.clientWidth || BASE_WIDTH,
+    1
+  );
+  const height = Math.max(
+    window.innerHeight || document.documentElement.clientHeight || BASE_HEIGHT,
+    1
+  );
+
+  return { width, height };
+}
+
 function resizeCanvas(canvas: HTMLCanvasElement): void {
   canvasRef = canvas;
   const dpr = clamp(window.devicePixelRatio ?? 1, 1, 3);
   currentDpr = dpr;
 
-  const viewportWidth = Math.max(
-    window.innerWidth || document.documentElement.clientWidth || BASE_WIDTH,
-    1
-  );
-  const viewportHeight = Math.max(
-    window.innerHeight || document.documentElement.clientHeight || BASE_HEIGHT,
-    1
-  );
+  const { width: viewportWidth, height: viewportHeight } = getViewportDimensions();
   const rawScale = Math.min(viewportWidth / BASE_WIDTH, viewportHeight / BASE_HEIGHT) || 1;
-  const cssW = Math.max(1, Math.floor(BASE_WIDTH * rawScale));
-  const cssH = Math.max(1, Math.floor(BASE_HEIGHT * rawScale));
-  const offsetX = (viewportWidth - cssW) / 2;
-  const offsetY = (viewportHeight - cssH) / 2;
+  const cssW = Math.max(1, Math.round(BASE_WIDTH * rawScale));
+  const cssH = Math.max(1, Math.round(BASE_HEIGHT * rawScale));
+  const offsetX = Math.round((viewportWidth - cssW) / 2);
+  const offsetY = Math.round((viewportHeight - cssH) / 2);
 
   canvas.style.position = 'fixed';
   canvas.style.left = `${offsetX}px`;
@@ -98,8 +100,8 @@ function resizeCanvas(canvas: HTMLCanvasElement): void {
   canvas.style.height = `${cssH}px`;
   canvas.style.display = 'block';
 
-  const bufferWidth = Math.floor(BASE_WIDTH * dpr);
-  const bufferHeight = Math.floor(BASE_HEIGHT * dpr);
+  const bufferWidth = Math.round(BASE_WIDTH * dpr);
+  const bufferHeight = Math.round(BASE_HEIGHT * dpr);
 
   if (canvas.width !== bufferWidth) {
     canvas.width = bufferWidth;
@@ -113,22 +115,16 @@ function resizeCanvas(canvas: HTMLCanvasElement): void {
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  layout.scale = cssW / BASE_WIDTH;
-  layout.offsetX = offsetX;
-  layout.offsetY = offsetY;
-  layout.dpr = dpr;
-  layout.cssW = cssW;
-  layout.cssH = cssH;
-
   log('resizeCanvas applied', {
     dpr,
     bufferWidth,
     bufferHeight,
     cssW,
     cssH,
-    scale: layout.scale,
     offsetX,
     offsetY,
+    viewportWidth,
+    viewportHeight,
   });
 }
 
@@ -288,7 +284,7 @@ const handleDOMContentLoaded = (): void => {
     };
 
     resizeCanvas(canvas);
-    bootGame(canvas, getLayout);
+    bootGame(canvas);
     log('bootGame invoked');
 
     const handleResize = (): void => {
@@ -298,6 +294,13 @@ const handleDOMContentLoaded = (): void => {
 
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
+    window.visualViewport?.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('scroll', handleResize);
+
+    canvas.addEventListener('gesturestart', (event) => event.preventDefault());
+    canvas.addEventListener('gesturechange', (event) => event.preventDefault());
+    canvas.addEventListener('wheel', (event) => event.preventDefault(), { passive: false });
+    canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
 
     wireGate(start);
 
