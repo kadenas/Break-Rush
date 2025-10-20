@@ -46,8 +46,10 @@ function update(dt: number) {
 
 function render() {
   const layout = computeLayout(canvas);
+
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
   applyRenderTransform(ctx, layout);
 
   ctx.fillStyle = '#0b1f33';
@@ -69,6 +71,7 @@ function render() {
   }
 
   drawPlayer(ctx, player);
+
   ctx.fillStyle = 'rgba(255,255,255,0.8)';
   ctx.font = '16px system-ui';
   ctx.textAlign = 'right';

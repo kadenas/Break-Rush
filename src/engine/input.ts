@@ -1,11 +1,24 @@
-import { clientToVirtual, computeLayout, VW, VH } from './viewport';
+import { computeLayout, VW, VH } from './viewport';
 
-export type PointerState = { active: boolean; x: number; y: number };
+export type PointerKind = 'mouse' | 'touch' | 'pen';
+export type PointerState = { active: boolean; x: number; y: number; type: PointerKind };
 
 let canvasRef: HTMLCanvasElement | null = null;
-let pointer: PointerState = { active: false, x: VW / 2, y: VH / 2 };
+let pointer: PointerState = { active: false, x: VW / 2, y: VH / 2, type: 'mouse' };
 let activeId: number | null = null;
 const keys = new Set<string>();
+
+function clientToVirtual(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+  const layout = computeLayout(canvas);
+  const xCss = clientX - layout.offX;
+  const yCss = clientY - layout.offY;
+  const xVirt = xCss / layout.scale;
+  const yVirt = yCss / layout.scale;
+  return {
+    x: Math.max(0, Math.min(VW, xVirt)),
+    y: Math.max(0, Math.min(VH, yVirt)),
+  };
+}
 
 export function initInput(canvas: HTMLCanvasElement) {
   canvasRef = canvas;
@@ -14,21 +27,26 @@ export function initInput(canvas: HTMLCanvasElement) {
     if (!canvasRef) return;
     canvasRef.setPointerCapture?.(e.pointerId);
     activeId = e.pointerId;
-    const layout = computeLayout(canvasRef);
-    const v = clientToVirtual(layout, e.clientX, e.clientY);
-    pointer = { active: true, x: v.x, y: v.y };
+    const v = clientToVirtual(canvasRef, e.clientX, e.clientY);
+    pointer = {
+      active: true,
+      x: v.x,
+      y: v.y,
+      type: e.pointerType === 'touch' || e.pointerType === 'pen' ? (e.pointerType as PointerKind) : 'mouse',
+    };
     e.preventDefault();
   };
+
   const onMove = (e: PointerEvent) => {
     if (!canvasRef) return;
     if (activeId !== null && e.pointerId === activeId) {
-      const layout = computeLayout(canvasRef);
-      const v = clientToVirtual(layout, e.clientX, e.clientY);
+      const v = clientToVirtual(canvasRef, e.clientX, e.clientY);
       pointer.x = v.x;
       pointer.y = v.y;
       e.preventDefault();
     }
   };
+
   const onEnd = (e: PointerEvent) => {
     if (activeId !== null && e.pointerId === activeId) {
       activeId = null;
@@ -60,6 +78,7 @@ export function initInput(canvas: HTMLCanvasElement) {
 export function getPointer(): PointerState {
   return pointer;
 }
+
 export function isKeyDown(code: string): boolean {
   return keys.has(code);
 }
