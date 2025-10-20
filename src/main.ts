@@ -1,172 +1,100 @@
 import './styles.css';
-import { createRng } from './core/rng';
-import { GameLoop } from './core/loop';
-import { StateMachine } from './core/state';
-import { AudioSystem } from './engine/audio';
-import { CanvasSurface, setPageInteractive } from './engine/canvas';
-import { Haptics } from './engine/haptics';
-import { InputSystem } from './engine/input';
-import { GameWorld } from './game/world';
+import { bootGame, isGameRunning, renderFrame, startGame } from './core/game';
+import { unlockAudio } from './engine/audio';
 import { registerServiceWorker } from './pwa/registerSW';
-import { loadHighScore, saveHighScore } from './storage/highscore';
-import { loadSettings, saveSettings, Settings } from './storage/settings';
-import { applyTheme, THEMES } from './ui/theme';
-import { OptionsPanel } from './ui/options';
-import { MenuOverlay } from './ui/menu';
-import { Hud } from './ui/hud';
 
-const app = document.getElementById('app');
-if (!app) {
-  throw new Error('App root missing');
-}
+const VIRTUAL_WIDTH = 360;
+const VIRTUAL_HEIGHT = 640;
 
-const wrapper = document.createElement('div');
-wrapper.className = 'canvas-wrapper';
-app.appendChild(wrapper);
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.min(Math.max(value, min), max);
+};
 
-const surface = new CanvasSurface();
-wrapper.appendChild(surface.canvas);
+const qs = <T extends Element>(selector: string): T => {
+  const element = document.querySelector<T>(selector);
+  if (!element) {
+    throw new Error(`Missing required element: ${selector}`);
+  }
+  return element;
+};
 
-const audio = new AudioSystem();
-const haptics = new Haptics();
-const rng = createRng(Date.now());
-const input = new InputSystem(surface.canvas);
-const world = new GameWorld({ rng, audio, haptics, input });
-const state = new StateMachine();
+const resizeCanvas = (canvas: HTMLCanvasElement): void => {
+  const dpr = clamp(window.devicePixelRatio ?? 1, 1, 3);
+  const width = Math.floor(VIRTUAL_WIDTH * dpr);
+  const height = Math.floor(VIRTUAL_HEIGHT * dpr);
 
-let settings: Settings = loadSettings();
-applyTheme(THEMES.find((theme) => theme.name === settings.theme) ?? THEMES[0]);
-audio.setMuted(!settings.sound);
-haptics.setEnabled(settings.haptics);
-input.setControlMode(settings.controlMode);
+  if (canvas.width !== width) {
+    canvas.width = width;
+  }
+  if (canvas.height !== height) {
+    canvas.height = height;
+  }
 
-const optionsPanel = new OptionsPanel(settings, {
-  onTheme: (theme) => {
-    settings.theme = theme;
-    applyTheme(THEMES.find((t) => t.name === theme) ?? THEMES[0]);
-    saveSettings(settings);
-  },
-  onSound: (enabled) => {
-    settings.sound = enabled;
-    audio.setMuted(!enabled);
-    saveSettings(settings);
-  },
-  onHaptics: (enabled) => {
-    settings.haptics = enabled;
-    haptics.setEnabled(enabled);
-    saveSettings(settings);
-  },
-  onControl: (mode) => {
-    settings.controlMode = mode;
-    input.setControlMode(mode);
-    saveSettings(settings);
-  },
-});
+  canvas.style.width = '100vw';
+  canvas.style.height = '100vh';
 
-const hud = new Hud(
-  () => {
-    if (state.value === 'playing') {
-      state.transition('pause');
+  const context = canvas.getContext('2d');
+  if (context) {
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+};
+
+const sanityPaint = (canvas: HTMLCanvasElement): void => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#b4002f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const fontSize = Math.max(24, Math.round(canvas.width / 12));
+  ctx.font = `${fontSize}px "Segoe UI", system-ui, sans-serif`;
+  ctx.fillText('BOOT OK', canvas.width / 2, canvas.height / 2);
+  ctx.restore();
+};
+
+const init = (): void => {
+  const canvas = qs<HTMLCanvasElement>('#game');
+
+  const applyResize = () => {
+    resizeCanvas(canvas);
+    if (isGameRunning()) {
+      renderFrame();
     } else {
-      state.transition('playing');
+      bootGame(canvas);
     }
-  },
-  () => {
-    startGame();
-  }
-);
-hud.mount(wrapper);
-hud.setVisible(false);
+  };
 
-const menu = new MenuOverlay(wrapper, optionsPanel, {
-  onStart: () => startGame(),
-  onResume: () => state.transition('playing'),
-  onRestart: () => startGame(),
-});
+  applyResize();
+  window.addEventListener('resize', applyResize);
 
-let hiScore = loadHighScore();
-let snapshot = world.snapshot();
+  window.addEventListener(
+    'user-start',
+    () => {
+      unlockAudio();
+      sanityPaint(canvas);
+      startGame();
+    },
+    { once: true }
+  );
 
-state.onChange((next) => {
-  switch (next) {
-    case 'menu':
-      menu.show('menu');
-      hud.setVisible(false);
-      input.setEnabled(false);
-      setPageInteractive(false);
-      break;
-    case 'playing':
-      menu.setVisible(false);
-      hud.setVisible(true);
-      hud.setPaused(false);
-      input.setEnabled(true);
-      setPageInteractive(true);
-      break;
-    case 'pause':
-      menu.show('pause');
-      hud.setPaused(true);
-      input.setEnabled(false);
-      setPageInteractive(false);
-      break;
-    case 'gameover':
-      menu.show('gameover', snapshot.score.score, hiScore);
-      hud.setPaused(true);
-      input.setEnabled(false);
-      setPageInteractive(false);
-      break;
-  }
-});
+  canvas.addEventListener(
+    'pointerdown',
+    () => {
+      startGame();
+    },
+    { once: true }
+  );
+};
 
-const loop = new GameLoop(
-  (dt) => {
-    if (state.value !== 'playing') return;
-    if (input.consumePauseRequest()) {
-      state.transition('pause');
-      return;
-    }
-    const gameOver = world.update(dt);
-    snapshot = world.snapshot();
-    hud.update(snapshot, hiScore);
-    if (gameOver) {
-      hiScore = Math.max(hiScore, snapshot.score.score);
-      saveHighScore(hiScore);
-      state.transition('gameover');
-    }
-  },
-  (alpha) => {
-    world.render(surface.ctx, alpha);
-    if (state.value !== 'playing') {
-      snapshot = world.snapshot();
-      hud.update(snapshot, hiScore);
-    }
-  }
-);
-
-loop.start();
-state.transition('menu');
-
-let autoPaused = false;
-
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && state.value === 'playing') {
-    autoPaused = true;
-    state.transition('pause');
-  } else if (!document.hidden && autoPaused && state.value === 'pause') {
-    autoPaused = false;
-  }
-});
-
-input.addEventListener('pause', () => {
-  if (state.value === 'playing') {
-    state.transition('pause');
-  }
-});
-
-function startGame() {
-  world.reset();
-  snapshot = world.snapshot();
-  hud.update(snapshot, hiScore);
-  state.transition('playing');
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init, { once: true });
+} else {
+  init();
 }
 
 registerServiceWorker();

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'break-rush-v1';
+const CACHE_VERSION = 'break-rush-v2024_05_25';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
