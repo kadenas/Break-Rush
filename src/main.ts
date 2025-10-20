@@ -3,6 +3,7 @@ import { unlockAudio } from './engine/audio';
 import { setState, getState } from './core/state';
 import { initInput } from './engine/input';
 import { computeLayout } from './engine/viewport';
+import { toggleDebug } from './engine/debug';
 
 function qs<T extends HTMLElement>(sel: string): T {
   const el = document.querySelector(sel) as T | null;
@@ -14,7 +15,6 @@ function sizeCanvas(c: HTMLCanvasElement){
   const L = computeLayout();
   c.width  = Math.floor(L.vwCss * L.dpr);
   c.height = Math.floor(L.vhCss * L.dpr);
-  // CSS full viewport; we center the virtual area via transform in render
   Object.assign(c.style, {
     position:'fixed', left:'0px', top:'0px', width:'100vw', height:'100vh'
   } as CSSStyleDeclaration);
@@ -33,7 +33,6 @@ function wireGate(startCb: () => void){
 window.addEventListener('DOMContentLoaded', ()=>{
   const canvas = qs<HTMLCanvasElement>('#game');
 
-  // block browser gestures while over the canvas
   canvas.addEventListener('wheel', e=>e.preventDefault(), { passive:false });
   canvas.addEventListener('gesturestart', e=>e.preventDefault());
 
@@ -46,10 +45,13 @@ window.addEventListener('DOMContentLoaded', ()=>{
   bootGame(canvas);
 
   const start = () => startGame();
-
   wireGate(start);
 
-  // fallback: tap canvas to start if overlay is gone
+  // F toggles overlay
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyF') toggleDebug();
+  });
+
   canvas.addEventListener('pointerdown', ()=>{
     if (getState()==='menu'){ setState('playing'); start(); }
   }, { once:false });
