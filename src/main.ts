@@ -1,4 +1,5 @@
 import { bootGame, startGame } from './core/game';
+import { getState, isPlaying, setState } from './core/state';
 import { unlockAudio } from './engine/audio';
 
 const VIRTUAL_WIDTH = 360;
@@ -42,8 +43,30 @@ const drawBootIndicator = (canvas: HTMLCanvasElement): void => {
   context.font = '24px "Segoe UI", system-ui, sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillText('BOOT OK', 24 + 90, 24 + 36);
+  context.fillText('BOOT OK', 114, 60);
   context.restore();
+};
+
+type ListenerDisposer = () => void;
+
+type EventTuple = [EventTarget | null, string, EventListenerOrEventListenerObject, AddEventListenerOptions?];
+
+const addListeners = (tuples: EventTuple[]): ListenerDisposer => {
+  const disposers: ListenerDisposer[] = [];
+
+  tuples.forEach(([target, type, listener, options]) => {
+    if (!target) {
+      return;
+    }
+    target.addEventListener(type, listener as EventListener, options);
+    disposers.push(() => {
+      target.removeEventListener(type, listener as EventListener, options);
+    });
+  });
+
+  return () => {
+    disposers.forEach((dispose) => dispose());
+  };
 };
 
 const setup = (): void => {
@@ -52,24 +75,23 @@ const setup = (): void => {
     throw new Error('Game canvas not found');
   }
 
-  const gate = document.getElementById('gate');
-  const gateButton = document.getElementById('gate-btn') as HTMLButtonElement | null;
-  let gameStarted = false;
+  resizeCanvas(canvas);
+  bootGame(canvas);
 
-  const handleResize = (): void => {
-    resizeCanvas(canvas);
-    if (!gameStarted) {
-      bootGame(canvas);
-      drawBootIndicator(canvas);
+  const gate = document.getElementById('gate');
+  const gateButton = document.getElementById('gate-btn');
+
+  const cleanupListeners: ListenerDisposer[] = [];
+
+  const cleanupAll = (): void => {
+    while (cleanupListeners.length > 0) {
+      const dispose = cleanupListeners.pop();
+      dispose?.();
     }
   };
 
-  handleResize();
-  window.addEventListener('resize', handleResize);
-  window.addEventListener('orientationchange', handleResize);
-
   const beginGame = (event: Event): void => {
-    if (gameStarted) {
+    if (isPlaying()) {
       return;
     }
 
@@ -77,60 +99,67 @@ const setup = (): void => {
       event.preventDefault();
     }
 
-    gameStarted = true;
-
     unlockAudio();
+    setState('playing');
     startGame();
+    drawBootIndicator(canvas);
 
     if (gate && gate.isConnected) {
       gate.remove();
     }
 
-    window.removeEventListener('keydown', beginGame);
-    teardownCanvasListeners();
+    cleanupAll();
   };
 
-  const fallbackStart = (event: Event): void => {
+  const gateHandlers: EventTuple[] = [
+    [gate, 'pointerdown', beginGame],
+    [gate, 'touchstart', beginGame, { passive: false }],
+    [gate, 'keydown', beginGame],
+    [gateButton, 'pointerdown', beginGame],
+    [gateButton, 'touchstart', beginGame, { passive: false }],
+    [gateButton, 'keydown', beginGame],
+  ];
+
+  cleanupListeners.push(addListeners(gateHandlers));
+
+  const canvasFallback = (event: Event): void => {
+    if (getState() !== 'menu') {
+      return;
+    }
     beginGame(event);
   };
 
-  function teardownCanvasListeners(): void {
-    canvas.removeEventListener('pointerdown', fallbackStart);
-    canvas.removeEventListener('touchstart', fallbackStart, { passive: false });
-  }
+  cleanupListeners.push(
+    addListeners([
+      [canvas, 'pointerdown', canvasFallback],
+      [canvas, 'touchstart', canvasFallback, { passive: false }],
+    ])
+  );
 
-  const registerStart = (
-    target: EventTarget | null,
-    type: string,
-    options?: AddEventListenerOptions
-  ): void => {
-    if (!target) {
-      return;
+  const handleResize = (): void => {
+    resizeCanvas(canvas);
+    if (!isPlaying()) {
+      bootGame(canvas);
     }
-    target.addEventListener(type, beginGame, options);
   };
 
-  registerStart(gate, 'pointerdown');
-  registerStart(gate, 'touchstart', { passive: false });
-  registerStart(gate, 'keydown');
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('orientationchange', handleResize);
 
-  registerStart(gateButton, 'pointerdown');
-  registerStart(gateButton, 'touchstart', { passive: false });
-  registerStart(gateButton, 'keydown');
-  registerStart(window, 'keydown');
+  cleanupListeners.push(() => window.removeEventListener('resize', handleResize));
+  cleanupListeners.push(() => window.removeEventListener('orientationchange', handleResize));
 
   if (gate instanceof HTMLElement) {
     gate.tabIndex = -1;
   }
 
-  try {
-    gateButton?.focus({ preventScroll: true });
-  } catch {
-    gateButton?.focus();
+  if (gateButton instanceof HTMLButtonElement) {
+    try {
+      gateButton.focus({ preventScroll: true });
+    } catch {
+      gateButton.focus();
+    }
   }
-
-  canvas.addEventListener('pointerdown', fallbackStart);
-  canvas.addEventListener('touchstart', fallbackStart, { passive: false });
 };
 
 if (document.readyState === 'loading') {

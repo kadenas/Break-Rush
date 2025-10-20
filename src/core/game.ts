@@ -1,12 +1,12 @@
+import { getState } from './state';
+
 const VIRTUAL_WIDTH = 360;
 const VIRTUAL_HEIGHT = 640;
 
-let canvasRef: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let running = false;
 let rafId: number | null = null;
-let lastTime = 0;
-let pulse = 0;
+let time = 0;
 
 export const bootGame = (canvas: HTMLCanvasElement): void => {
   const context = canvas.getContext('2d');
@@ -14,23 +14,20 @@ export const bootGame = (canvas: HTMLCanvasElement): void => {
     return;
   }
 
-  canvasRef = canvas;
   ctx = context;
-  running = false;
-  pulse = 0;
+  time = 0;
 
   if (rafId !== null) {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
 
-  lastTime = performance.now();
-  update(0);
+  running = false;
   render();
 };
 
 export const startGame = (): void => {
-  if (!ctx || !canvasRef) {
+  if (!ctx) {
     return;
   }
   if (running) {
@@ -38,34 +35,29 @@ export const startGame = (): void => {
   }
 
   running = true;
-  lastTime = performance.now();
+  let lastTime = performance.now();
 
-  const tick = (time: number): void => {
+  const loop = (now: number): void => {
     if (!running) {
       return;
     }
 
-    const dt = Math.min(Math.max((time - lastTime) / 1000, 0), 0.05);
-    lastTime = time;
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
 
     update(dt);
     render();
 
-    rafId = requestAnimationFrame(tick);
+    rafId = requestAnimationFrame(loop);
   };
 
   update(0);
   render();
-  rafId = requestAnimationFrame(tick);
+  rafId = requestAnimationFrame(loop);
 };
 
 export const stopGame = (): void => {
-  if (!running) {
-    return;
-  }
-
   running = false;
-
   if (rafId !== null) {
     cancelAnimationFrame(rafId);
     rafId = null;
@@ -73,7 +65,7 @@ export const stopGame = (): void => {
 };
 
 const update = (dt: number): void => {
-  pulse += dt * 2.4;
+  time += dt;
 };
 
 const render = (): void => {
@@ -81,33 +73,73 @@ const render = (): void => {
     return;
   }
 
-  ctx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
 
-  const gradient = ctx.createLinearGradient(0, 0, 0, VIRTUAL_HEIGHT);
-  gradient.addColorStop(0, '#050b18');
-  gradient.addColorStop(1, '#02040c');
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = '#11263f';
   ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
-  const glowStrength = 0.28 + Math.sin(pulse * 2) * 0.12;
-  ctx.fillStyle = `rgba(239, 68, 68, ${glowStrength.toFixed(3)})`;
-  ctx.beginPath();
-  ctx.arc(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2, 120 + Math.sin(pulse) * 12, 0, Math.PI * 2);
-  ctx.fill();
+  const currentState = getState();
 
-  ctx.fillStyle = 'rgba(14, 165, 233, 0.12)';
-  for (let i = 0; i < 12; i += 1) {
-    const offset = ((pulse * 40 + i * 30) % (VIRTUAL_HEIGHT + 120)) - 60;
-    ctx.fillRect(40 + (i % 3) * 90, offset, 12, 72);
+  if (currentState === 'menu') {
+    drawMenu();
+    return;
+  }
+
+  if (currentState === 'playing') {
+    drawGameplay();
+    return;
+  }
+
+  drawFallback(currentState);
+};
+
+const drawMenu = (): void => {
+  if (!ctx) {
+    return;
   }
 
   ctx.fillStyle = '#f8fafc';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '28px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText('Break Rush', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 - 18);
+  ctx.fillText('Break Rush', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 - 28);
 
-  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = '#93c5fd';
-  ctx.fillText('Systems nominal', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 + 26);
+  ctx.font = '18px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = '#7dd3fc';
+  ctx.fillText('Tap para jugar', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 + 12);
+};
+
+const drawGameplay = (): void => {
+  if (!ctx) {
+    return;
+  }
+
+  const markerX = VIRTUAL_WIDTH / 2 + Math.sin(time * 1.8) * 60;
+  const markerY = VIRTUAL_HEIGHT / 2 + Math.cos(time * 2.1) * 32;
+
+  ctx.fillStyle = 'rgba(6, 182, 212, 0.85)';
+  ctx.beginPath();
+  ctx.arc(markerX, markerY, 18 + Math.sin(time * 3) * 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = '18px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('PLAYING', VIRTUAL_WIDTH / 2, 24);
+};
+
+const drawFallback = (state: ReturnType<typeof getState>): void => {
+  if (!ctx) {
+    return;
+  }
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '24px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(state.toUpperCase(), VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
 };
