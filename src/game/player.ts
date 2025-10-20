@@ -1,66 +1,108 @@
-import { clamp, damp } from '../utils/math';
+import { getPointer, isKeyDown } from '../engine/input';
+import { clamp } from '../utils/math';
 
-export interface PlayerSnapshot {
+const VIRTUAL_WIDTH = 360;
+const VIRTUAL_HEIGHT = 640;
+
+export interface Player {
   x: number;
   y: number;
-  radius: number;
-  shield: number;
+  r: number;
+  tx: number;
+  ty: number;
+  speedMax: number;
 }
 
-export class Player {
-  x = 180;
-  y = 540;
-  radius = 16;
-  speed = 8;
-  shieldCharges = 0;
-  invulnerableTime = 0;
-  private targetX = this.x;
-  private targetY = this.y;
+export const createPlayer = (): Player => {
+  const startX = VIRTUAL_WIDTH / 2;
+  const startY = 520;
 
-  reset(): void {
-    this.x = 180;
-    this.y = 540;
-    this.targetX = this.x;
-    this.targetY = this.y;
-    this.shieldCharges = 0;
-    this.invulnerableTime = 0;
-  }
+  return {
+    x: startX,
+    y: startY,
+    r: 14,
+    tx: startX,
+    ty: startY,
+    speedMax: 220,
+  };
+};
 
-  setTarget(x: number, y: number): void {
-    this.targetX = clamp(x, 18, 342);
-    this.targetY = clamp(y, 120, 620);
-  }
+export const updatePlayer = (player: Player, dt: number): void => {
+  const pointer = getPointer();
 
-  giveShield(): void {
-    this.shieldCharges = 1;
-  }
+  if (pointer.active) {
+    player.tx = clamp(pointer.x, player.r, VIRTUAL_WIDTH - player.r);
+    player.ty = clamp(pointer.y, player.r, VIRTUAL_HEIGHT - player.r);
 
-  addShieldLayer(): void {
-    this.shieldCharges = Math.min(2, this.shieldCharges + 1);
-  }
+    const follow = 1 - Math.exp(-dt * 14);
+    player.x += (player.tx - player.x) * follow;
+    player.y += (player.ty - player.y) * follow;
+  } else {
+    let dx = 0;
+    let dy = 0;
 
-  takeHit(): boolean {
-    if (this.shieldCharges > 0) {
-      this.shieldCharges -= 1;
-      this.invulnerableTime = 1.2;
-      return false;
+    if (isKeyDown('ArrowLeft') || isKeyDown('KeyA')) {
+      dx -= 1;
     }
-    return true;
+    if (isKeyDown('ArrowRight') || isKeyDown('KeyD')) {
+      dx += 1;
+    }
+    if (isKeyDown('ArrowUp') || isKeyDown('KeyW')) {
+      dy -= 1;
+    }
+    if (isKeyDown('ArrowDown') || isKeyDown('KeyS')) {
+      dy += 1;
+    }
+
+    if (dx !== 0 || dy !== 0) {
+      const length = Math.hypot(dx, dy) || 1;
+      dx /= length;
+      dy /= length;
+
+      player.x += dx * player.speedMax * dt;
+      player.y += dy * player.speedMax * dt;
+
+      player.tx = player.x;
+      player.ty = player.y;
+    }
   }
 
-  update(dt: number, slowFactor: number): void {
-    this.invulnerableTime = Math.max(0, this.invulnerableTime - dt);
-    const lambda = this.speed * slowFactor;
-    this.x = damp(this.x, this.targetX, lambda, dt);
-    this.y = damp(this.y, this.targetY, lambda, dt);
-  }
+  player.x = clamp(player.x, player.r, VIRTUAL_WIDTH - player.r);
+  player.y = clamp(player.y, player.r, VIRTUAL_HEIGHT - player.r);
+};
 
-  snapshot(): PlayerSnapshot {
-    return {
-      x: this.x,
-      y: this.y,
-      radius: this.radius,
-      shield: this.shieldCharges,
-    };
-  }
-}
+export const drawPlayer = (
+  ctx: CanvasRenderingContext2D,
+  player: Player,
+  dpr: number
+): void => {
+  const px = player.x * dpr;
+  const py = player.y * dpr;
+  const radius = player.r * dpr;
+
+  ctx.save();
+
+  ctx.fillStyle = 'rgba(6, 22, 36, 0.35)';
+  ctx.beginPath();
+  ctx.arc(px, py + radius * 0.55, radius * 1.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  const gradient = ctx.createRadialGradient(
+    px - radius * 0.4,
+    py - radius * 0.6,
+    radius * 0.25,
+    px,
+    py,
+    radius
+  );
+  gradient.addColorStop(0, '#e0faff');
+  gradient.addColorStop(0.5, '#5eead4');
+  gradient.addColorStop(1, '#0891b2');
+
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(px, py, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+};

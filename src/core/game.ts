@@ -1,3 +1,5 @@
+import { initInput } from '../engine/input';
+import { createPlayer, drawPlayer, Player, updatePlayer } from '../game/player';
 import { getState } from './state';
 
 const VIRTUAL_WIDTH = 360;
@@ -7,6 +9,7 @@ let ctx: CanvasRenderingContext2D | null = null;
 let running = false;
 let rafId: number | null = null;
 let time = 0;
+let player: Player | null = null;
 
 export const bootGame = (canvas: HTMLCanvasElement): void => {
   const context = canvas.getContext('2d');
@@ -14,7 +17,10 @@ export const bootGame = (canvas: HTMLCanvasElement): void => {
     return;
   }
 
+  initInput(canvas);
+
   ctx = context;
+  player = createPlayer();
   time = 0;
 
   if (rafId !== null) {
@@ -66,6 +72,14 @@ export const stopGame = (): void => {
 
 const update = (dt: number): void => {
   time += dt;
+
+  if (!player) {
+    return;
+  }
+
+  if (getState() === 'playing') {
+    updatePlayer(player, dt);
+  }
 };
 
 const render = (): void => {
@@ -73,12 +87,15 @@ const render = (): void => {
     return;
   }
 
+  const canvas = ctx.canvas;
+  const dpr = canvas.width / VIRTUAL_WIDTH || 1;
+
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
 
-  ctx.fillStyle = '#11263f';
+  ctx.fillStyle = '#041225';
   ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
   const currentState = getState();
@@ -89,7 +106,7 @@ const render = (): void => {
   }
 
   if (currentState === 'playing') {
-    drawGameplay();
+    drawGameplay(dpr);
     return;
   }
 
@@ -101,35 +118,56 @@ const drawMenu = (): void => {
     return;
   }
 
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = '#e2f3ff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '28px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText('Break Rush', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 - 28);
+  ctx.font = '30px "Segoe UI", system-ui, sans-serif';
+  ctx.fillText('Break Rush', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 - 36);
 
   ctx.font = '18px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = '#7dd3fc';
-  ctx.fillText('Tap para jugar', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 + 12);
+  ctx.fillStyle = '#60a5fa';
+  ctx.fillText('Tap to start', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 + 8);
 };
 
-const drawGameplay = (): void => {
-  if (!ctx) {
+const drawGameplay = (dpr: number): void => {
+  if (!ctx || !player) {
     return;
   }
 
-  const markerX = VIRTUAL_WIDTH / 2 + Math.sin(time * 1.8) * 60;
-  const markerY = VIRTUAL_HEIGHT / 2 + Math.cos(time * 2.1) * 32;
+  ctx.save();
 
-  ctx.fillStyle = 'rgba(6, 182, 212, 0.85)';
+  const glowRadius = 90;
+  const gradient = ctx.createRadialGradient(
+    VIRTUAL_WIDTH / 2,
+    VIRTUAL_HEIGHT / 2,
+    24,
+    VIRTUAL_WIDTH / 2,
+    VIRTUAL_HEIGHT / 2,
+    glowRadius
+  );
+  gradient.addColorStop(0, 'rgba(56, 189, 248, 0.15)');
+  gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([8, 10]);
   ctx.beginPath();
-  ctx.arc(markerX, markerY, 18 + Math.sin(time * 3) * 4, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(0, VIRTUAL_HEIGHT - 120 + Math.sin(time * 1.8) * 6);
+  ctx.lineTo(VIRTUAL_WIDTH, VIRTUAL_HEIGHT - 120 + Math.sin(time * 1.8) * 6);
+  ctx.stroke();
 
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = '18px "Segoe UI", system-ui, sans-serif';
-  ctx.textAlign = 'center';
+  ctx.restore();
+
+  drawPlayer(ctx, player, dpr);
+
+  ctx.fillStyle = 'rgba(226, 243, 255, 0.85)';
+  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'right';
   ctx.textBaseline = 'top';
-  ctx.fillText('PLAYING', VIRTUAL_WIDTH / 2, 24);
+  ctx.fillText('PLAYING', VIRTUAL_WIDTH - 12, 16);
 };
 
 const drawFallback = (state: ReturnType<typeof getState>): void => {
@@ -137,7 +175,7 @@ const drawFallback = (state: ReturnType<typeof getState>): void => {
     return;
   }
 
-  ctx.fillStyle = '#f8fafc';
+  ctx.fillStyle = '#e2f3ff';
   ctx.font = '24px "Segoe UI", system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
