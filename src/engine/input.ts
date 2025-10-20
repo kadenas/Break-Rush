@@ -1,208 +1,212 @@
-import { CanvasDimensions, toCanvasSpace } from './canvas';
-import { Vec2 } from '../utils/math';
+import { clamp } from '../utils/math';
 
-export interface InputSnapshot {
-  pointerActive: boolean;
-  pointerPosition: Vec2;
-  pointerDelta: Vec2;
-  pointerReleased: boolean;
-  pointerReleasePosition: Vec2;
-  laneTap: number | null;
-  keyboardDirection: Vec2;
-  pausePressed: boolean;
-  retryPressed: boolean;
-  twoFingerPause: boolean;
-  toggleSound: boolean;
-  toggleHaptics: boolean;
-  toggleTheme: boolean;
-  toggleLaneMode: boolean;
+export type ControlMode = 'drag' | 'lanes';
+
+interface InputTarget {
+  x: number;
+  y: number;
+  active: boolean;
 }
 
-const ZERO_VEC: Vec2 = { x: 0, y: 0 };
+const LANE_POSITIONS = [0.2, 0.5, 0.8];
 
-export class InputManager {
-  private pointerActive = false;
-  private pointerPos: Vec2 = { x: 0, y: 0 };
-  private pointerDelta: Vec2 = { x: 0, y: 0 };
-  private pointerStart: Vec2 = { x: 0, y: 0 };
-  private pointerStartTime = 0;
-  private pointerReleased = false;
-  private pointerReleasePos: Vec2 = { x: 0, y: 0 };
-  private laneTap: number | null = null;
-  private pausePressed = false;
-  private retryPressed = false;
-  private twoFingerPause = false;
-  private keyboardDirection: Vec2 = { x: 0, y: 0 };
-  private toggleSound = false;
-  private toggleHaptics = false;
-  private toggleTheme = false;
-  private toggleLaneMode = false;
+export class InputSystem extends EventTarget {
+  private mode: ControlMode = 'drag';
+  private canvas: HTMLCanvasElement;
+  private enabled = false;
+  private activePointers = new Map<number, number>();
+  private primaryPointer: number | null = null;
+  private pointerTarget: InputTarget = { x: 0.5, y: 0.8, active: false };
+  private laneIndex = 1;
+  private pauseRequested = false;
+  private keyboardAxis = 0;
 
-  constructor(private readonly canvas: HTMLCanvasElement, private readonly dimensions: () => CanvasDimensions) {
-    canvas.addEventListener('pointerdown', this.onPointerDown, { passive: false });
-    canvas.addEventListener('pointermove', this.onPointerMove, { passive: false });
-    canvas.addEventListener('pointerup', this.onPointerUp, { passive: false });
-    canvas.addEventListener('pointercancel', this.onPointerUp, { passive: false });
-    canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
-
-    window.addEventListener('keydown', this.onKeyDown, { passive: false });
-    window.addEventListener('keyup', this.onKeyUp, { passive: false });
+  constructor(canvas: HTMLCanvasElement) {
+    super();
+    this.canvas = canvas;
+    this.attachPointerHandlers();
+    this.attachKeyboardHandlers();
   }
 
-  destroy(): void {
-    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
-    this.canvas.removeEventListener('pointermove', this.onPointerMove);
-    this.canvas.removeEventListener('pointerup', this.onPointerUp);
-    this.canvas.removeEventListener('pointercancel', this.onPointerUp);
-    this.canvas.removeEventListener('touchstart', this.onTouchStart);
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) {
+      this.pointerTarget.active = false;
+      this.keyboardAxis = 0;
+      this.primaryPointer = null;
+    }
   }
 
-  capture(): InputSnapshot {
-    const snapshot: InputSnapshot = {
-      pointerActive: this.pointerActive,
-      pointerPosition: { ...this.pointerPos },
-      pointerDelta: { ...this.pointerDelta },
-      pointerReleased: this.pointerReleased,
-      pointerReleasePosition: { ...this.pointerReleasePos },
-      laneTap: this.laneTap,
-      keyboardDirection: { ...this.keyboardDirection },
-      pausePressed: this.pausePressed,
-      retryPressed: this.retryPressed,
-      twoFingerPause: this.twoFingerPause,
-      toggleSound: this.toggleSound,
-      toggleHaptics: this.toggleHaptics,
-      toggleTheme: this.toggleTheme,
-      toggleLaneMode: this.toggleLaneMode
+  setControlMode(mode: ControlMode): void {
+    if (this.mode !== mode) {
+      this.mode = mode;
+      if (mode === 'lanes') {
+        this.pointerTarget.x = LANE_POSITIONS[this.laneIndex];
+      }
+    }
+  }
+
+  get controlMode(): ControlMode {
+    return this.mode;
+  }
+
+  getTarget(): InputTarget {
+    if (this.mode === 'drag' && this.keyboardAxis !== 0) {
+      const delta = this.keyboardAxis * 0.8;
+      this.pointerTarget.x = clamp(this.pointerTarget.x + delta, 0.08, 0.92);
+    }
+    return { ...this.pointerTarget };
+  }
+
+  consumePauseRequest(): boolean {
+    const flag = this.pauseRequested;
+    this.pauseRequested = false;
+    return flag;
+  }
+
+  private attachPointerHandlers(): void {
+    const pointerDown = (event: PointerEvent) => {
+      if (!this.enabled && event.pointerType === 'touch') {
+        return;
+      }
+      if (event.pointerType !== 'mouse') {
+        event.preventDefault();
+      }
+      this.activePointers.set(event.pointerId, performance.now());
+      if (this.primaryPointer === null) {
+        this.primaryPointer = event.pointerId;
+      }
+      if (this.activePointers.size >= 2) {
+        const times = [...this.activePointers.values()];
+        if (Math.max(...times) - Math.min(...times) < 220) {
+          this.pauseRequested = true;
+          this.dispatchEvent(new Event('pause'));
+        }
+      }
+      if (!this.enabled) {
+        return;
+      }
+      if (this.mode === 'lanes') {
+        this.handleLaneTap(event);
+      } else if (this.primaryPointer === event.pointerId) {
+        this.pointerTarget.active = true;
+        this.updatePointerTarget(event);
+      }
+      this.canvas.setPointerCapture(event.pointerId);
     };
-    this.pointerDelta = { ...ZERO_VEC };
-    this.laneTap = null;
-    this.pausePressed = false;
-    this.retryPressed = false;
-    this.twoFingerPause = false;
-    this.toggleSound = false;
-    this.toggleHaptics = false;
-    this.toggleTheme = false;
-    this.toggleLaneMode = false;
-    this.pointerReleased = false;
-    return snapshot;
+
+    const pointerMove = (event: PointerEvent) => {
+      if (!this.enabled) return;
+      if (this.mode === 'drag' && this.pointerTarget.active && event.pointerId === this.primaryPointer) {
+        this.updatePointerTarget(event);
+      }
+    };
+
+    const pointerUp = (event: PointerEvent) => {
+      this.activePointers.delete(event.pointerId);
+      if (this.mode === 'drag' && event.pointerId === this.primaryPointer) {
+        this.pointerTarget.active = false;
+      }
+      if (event.pointerId === this.primaryPointer) {
+        this.primaryPointer = null;
+      }
+      if (this.mode === 'lanes' && this.enabled) {
+        this.handleLaneTap(event);
+      }
+      try {
+        this.canvas.releasePointerCapture(event.pointerId);
+      } catch {
+        // ignore if not captured
+      }
+    };
+
+    this.canvas.addEventListener('pointerdown', pointerDown, { passive: false });
+    this.canvas.addEventListener('pointermove', pointerMove, { passive: false });
+    this.canvas.addEventListener('pointerup', pointerUp);
+    this.canvas.addEventListener('pointercancel', pointerUp);
   }
 
-  private onPointerDown = (event: PointerEvent) => {
-    if (event.pointerType === 'touch' && event.isPrimary === false) {
-      return;
-    }
-    event.preventDefault();
+  private handleLaneTap(event: PointerEvent): void {
     const rect = this.canvas.getBoundingClientRect();
-    const point = toCanvasSpace(this.dimensions(), event.clientX, event.clientY, rect);
-    this.pointerActive = true;
-    this.pointerPos = point;
-    this.pointerStart = point;
-    this.pointerStartTime = performance.now();
-  };
-
-  private onPointerMove = (event: PointerEvent) => {
-    if (!this.pointerActive) {
-      return;
+    const xNorm = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const yNorm = (event.clientY - rect.top) / rect.height;
+    if (yNorm < 0.3) return;
+    let index = 0;
+    if (xNorm < 1 / 3) index = 0;
+    else if (xNorm < 2 / 3) index = 1;
+    else index = 2;
+    if (index !== this.laneIndex) {
+      this.laneIndex = index;
+      this.pointerTarget.x = LANE_POSITIONS[index];
+      this.dispatchEvent(new CustomEvent('lane', { detail: index }));
     }
-    event.preventDefault();
+    this.pointerTarget.y = 0.85;
+    this.pointerTarget.active = true;
+  }
+
+  private updatePointerTarget(event: PointerEvent): void {
     const rect = this.canvas.getBoundingClientRect();
-    const point = toCanvasSpace(this.dimensions(), event.clientX, event.clientY, rect);
-    this.pointerDelta = { x: point.x - this.pointerPos.x, y: point.y - this.pointerPos.y };
-    this.pointerPos = point;
-  };
+    const yNorm = (event.clientY - rect.top) / rect.height;
+    if (yNorm < 0.3) return;
+    const xNorm = (event.clientX - rect.left) / rect.width;
+    this.pointerTarget.x = clamp(xNorm, 0.05, 0.95);
+    this.pointerTarget.y = clamp(yNorm, 0.3, 0.98);
+  }
 
-  private onPointerUp = (event: PointerEvent) => {
-    if (!this.pointerActive) {
-      return;
-    }
-    event.preventDefault();
-    const rect = this.canvas.getBoundingClientRect();
-    const point = toCanvasSpace(this.dimensions(), event.clientX, event.clientY, rect);
-    const time = performance.now() - this.pointerStartTime;
-    const dx = point.x - this.pointerStart.x;
-    const dy = point.y - this.pointerStart.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance < 20 && time < 250) {
-      const dim = this.dimensions();
-      const laneWidth = dim.width / 3;
-      const lane = Math.min(2, Math.max(0, Math.floor(point.x / laneWidth)));
-      this.laneTap = lane;
-    }
-    this.pointerReleasePos = point;
-    this.pointerReleased = true;
-    this.pointerActive = false;
-  };
+  private attachKeyboardHandlers(): void {
+    window.addEventListener('keydown', (event) => {
+      if (event.repeat) return;
+      switch (event.key.toLowerCase()) {
+        case 'arrowleft':
+        case 'a':
+          if (this.mode === 'lanes') {
+            this.setLane(this.laneIndex - 1);
+          } else {
+            this.keyboardAxis = -1;
+          }
+          break;
+        case 'arrowright':
+        case 'd':
+          if (this.mode === 'lanes') {
+            this.setLane(this.laneIndex + 1);
+          } else {
+            this.keyboardAxis = 1;
+          }
+          break;
+        case 'arrowup':
+        case 'w':
+          if (this.mode === 'drag') {
+            this.pointerTarget.y = clamp(this.pointerTarget.y - 0.1, 0.3, 0.98);
+          }
+          break;
+        case 'arrowdown':
+        case 's':
+          if (this.mode === 'drag') {
+            this.pointerTarget.y = clamp(this.pointerTarget.y + 0.1, 0.3, 0.98);
+          }
+          break;
+        case 'p':
+        case 'escape':
+          this.pauseRequested = true;
+          break;
+      }
+    });
 
-  private onTouchStart = (event: TouchEvent) => {
-    if (event.touches.length >= 2) {
-      event.preventDefault();
-      this.twoFingerPause = true;
-    }
-  };
+    window.addEventListener('keyup', (event) => {
+      if (['arrowleft', 'a'].includes(event.key.toLowerCase()) && this.keyboardAxis < 0) {
+        this.keyboardAxis = 0;
+      }
+      if (['arrowright', 'd'].includes(event.key.toLowerCase()) && this.keyboardAxis > 0) {
+        this.keyboardAxis = 0;
+      }
+    });
+  }
 
-  private onKeyDown = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
-    if (['arrowup', 'w'].includes(key)) {
-      this.keyboardDirection.y = -1;
-      event.preventDefault();
-    }
-    if (['arrowdown', 's'].includes(key)) {
-      this.keyboardDirection.y = 1;
-      event.preventDefault();
-    }
-    if (['arrowleft', 'a'].includes(key)) {
-      this.keyboardDirection.x = -1;
-      event.preventDefault();
-    }
-    if (['arrowright', 'd'].includes(key)) {
-      this.keyboardDirection.x = 1;
-      event.preventDefault();
-    }
-    if (key === 'p' || key === 'escape' || key === ' ') {
-      this.pausePressed = true;
-      event.preventDefault();
-    }
-    if (key === 'r') {
-      this.retryPressed = true;
-      event.preventDefault();
-    }
-    if (key === 'm') {
-      this.toggleSound = true;
-      event.preventDefault();
-    }
-    if (key === 'h') {
-      this.toggleHaptics = true;
-      event.preventDefault();
-    }
-    if (key === 'c' || key === 't') {
-      this.toggleTheme = true;
-      event.preventDefault();
-    }
-    if (key === 'l') {
-      this.toggleLaneMode = true;
-      event.preventDefault();
-    }
-    if (['1', '2', '3'].includes(key)) {
-      this.laneTap = parseInt(key, 10) - 1;
-      event.preventDefault();
-    }
-  };
-
-  private onKeyUp = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
-    if (['arrowup', 'w'].includes(key) && this.keyboardDirection.y < 0) {
-      this.keyboardDirection.y = 0;
-    }
-    if (['arrowdown', 's'].includes(key) && this.keyboardDirection.y > 0) {
-      this.keyboardDirection.y = 0;
-    }
-    if (['arrowleft', 'a'].includes(key) && this.keyboardDirection.x < 0) {
-      this.keyboardDirection.x = 0;
-    }
-    if (['arrowright', 'd'].includes(key) && this.keyboardDirection.x > 0) {
-      this.keyboardDirection.x = 0;
-    }
-  };
+  private setLane(index: number): void {
+    this.laneIndex = clamp(index, 0, LANE_POSITIONS.length - 1) | 0;
+    this.pointerTarget.x = LANE_POSITIONS[this.laneIndex];
+    this.pointerTarget.y = 0.85;
+    this.pointerTarget.active = true;
+    this.dispatchEvent(new CustomEvent('lane', { detail: this.laneIndex }));
+  }
 }

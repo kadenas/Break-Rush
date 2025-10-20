@@ -1,16 +1,17 @@
-export class HapticsManager {
-  private enabled = false;
+export class Haptics {
+  private enabled = true;
 
-  toggle(enable: boolean): void {
-    this.enabled = enable;
+  setEnabled(flag: boolean): void {
+    this.enabled = flag;
   }
 
-  pulse(duration = 40): void {
-    if (!this.enabled) {
-      return;
-    }
-    if ('vibrate' in navigator) {
-      navigator.vibrate(duration);
+  pulse(pattern: number | number[]): void {
+    if (!this.enabled) return;
+    if (!('vibrate' in navigator)) return;
+    try {
+      navigator.vibrate(pattern);
+    } catch (err) {
+      console.warn('Vibration rejected', err);
     }
   }
 }

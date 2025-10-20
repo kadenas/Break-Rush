@@ -1,45 +1,15 @@
-const KEY = 'break-rush-highscore';
+const KEY = 'break-rush:highscore';
 
-export class HighScoreStore {
-  private value = 0;
+export const loadHighScore = (): number => {
+  const raw = localStorage.getItem(KEY);
+  const value = raw ? Number(raw) : 0;
+  return Number.isFinite(value) ? value : 0;
+};
 
-  constructor() {
-    this.load();
+export const saveHighScore = (score: number): void => {
+  try {
+    localStorage.setItem(KEY, String(Math.floor(score)));
+  } catch (err) {
+    console.warn('Failed to store hi-score', err);
   }
-
-  get(): number {
-    return this.value;
-  }
-
-  submit(score: number): number {
-    if (score > this.value) {
-      this.value = score;
-      this.persist();
-    }
-    return this.value;
-  }
-
-  reset(): void {
-    this.value = 0;
-    this.persist();
-  }
-
-  private load(): void {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        this.value = Number(raw) || 0;
-      }
-    } catch (error) {
-      console.warn('No se pudo leer el récord', error);
-    }
-  }
-
-  private persist(): void {
-    try {
-      localStorage.setItem(KEY, String(this.value));
-    } catch (error) {
-      console.warn('No se pudo guardar el récord', error);
-    }
-  }
-}
+};

@@ -1,49 +1,59 @@
-/// <reference lib="webworker" />
-
-const CACHE_NAME = 'break-rush-cache-v1';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
+const CACHE_VERSION = 'break-rush-v1';
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
 self.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .catch((error) => console.warn('No se pudo precachear', error))
+    caches.open(STATIC_CACHE).then((cache) => cache.add(new URL('./', self.location.href))).catch(() => undefined)
   );
-  void self.skipWaiting();
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event: ExtendableEvent) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => !key.includes(CACHE_VERSION)).map((key) => caches.delete(key))))
   );
-  void self.clients.claim();
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event: FetchEvent) => {
   const request = event.request;
-  if (request.method !== 'GET') {
+  if (request.method !== 'GET' || new URL(request.url).origin !== location.origin) {
     return;
   }
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-      return fetch(request)
-        .then((response) => {
-          const url = new URL(request.url);
-          if (response.ok && url.origin === self.location.origin) {
-            const copy = response.clone();
-            void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-    })
-  );
+
+  if (request.destination === 'document') {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (['script', 'style', 'font', 'image'].includes(request.destination)) {
+    event.respondWith(cacheFirst(request));
+  }
 });
 
-export {}; // Marca el archivo como módulo.
+const networkFirst = async (request: Request): Promise<Response> => {
+  const cache = await caches.open(RUNTIME_CACHE);
+  try {
+    const response = await fetch(request);
+    cache.put(request, response.clone());
+    return response;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    return caches.match(new URL('./', self.location.href));
+  }
+};
+
+const cacheFirst = async (request: Request): Promise<Response> => {
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  cache.put(request, response.clone());
+  return response;
+};
+
+export {}; // keep module scope
