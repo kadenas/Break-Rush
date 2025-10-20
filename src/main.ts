@@ -1,6 +1,7 @@
 import { bootGame, startGame } from './core/game';
 import { unlockAudio } from './engine/audio';
 import { setState, getState } from './core/state';
+import type { Layout } from './engine/input';
 
 declare global {
   interface Window {
@@ -35,6 +36,17 @@ let debugHudEl: HTMLDivElement | null = null;
 let debugInfoEl: HTMLDivElement | null = null;
 let debugForceBtn: HTMLButtonElement | null = null;
 
+const layout: Layout = {
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+  dpr: 1,
+  cssW: BASE_WIDTH,
+  cssH: BASE_HEIGHT,
+};
+
+export const getLayout = (): Layout => layout;
+
 const debugEnabled = (() => {
   if (typeof window === 'undefined') {
     return false;
@@ -64,26 +76,60 @@ function resizeCanvas(canvas: HTMLCanvasElement): void {
   canvasRef = canvas;
   const dpr = clamp(window.devicePixelRatio ?? 1, 1, 3);
   currentDpr = dpr;
-  const width = Math.round(BASE_WIDTH * dpr);
-  const height = Math.round(BASE_HEIGHT * dpr);
 
-  if (canvas.width !== width) {
-    canvas.width = width;
-  }
-  if (canvas.height !== height) {
-    canvas.height = height;
-  }
+  const viewportWidth = Math.max(
+    window.innerWidth || document.documentElement.clientWidth || BASE_WIDTH,
+    1
+  );
+  const viewportHeight = Math.max(
+    window.innerHeight || document.documentElement.clientHeight || BASE_HEIGHT,
+    1
+  );
+  const rawScale = Math.min(viewportWidth / BASE_WIDTH, viewportHeight / BASE_HEIGHT) || 1;
+  const cssW = Math.max(1, Math.floor(BASE_WIDTH * rawScale));
+  const cssH = Math.max(1, Math.floor(BASE_HEIGHT * rawScale));
+  const offsetX = (viewportWidth - cssW) / 2;
+  const offsetY = (viewportHeight - cssH) / 2;
 
-  canvas.style.width = '100vw';
-  canvas.style.height = '100vh';
+  canvas.style.position = 'fixed';
+  canvas.style.left = `${offsetX}px`;
+  canvas.style.top = `${offsetY}px`;
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
   canvas.style.display = 'block';
+
+  const bufferWidth = Math.floor(BASE_WIDTH * dpr);
+  const bufferHeight = Math.floor(BASE_HEIGHT * dpr);
+
+  if (canvas.width !== bufferWidth) {
+    canvas.width = bufferWidth;
+  }
+  if (canvas.height !== bufferHeight) {
+    canvas.height = bufferHeight;
+  }
 
   const context = canvas.getContext('2d');
   if (context) {
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  log('resizeCanvas applied', { dpr, width, height });
+  layout.scale = cssW / BASE_WIDTH;
+  layout.offsetX = offsetX;
+  layout.offsetY = offsetY;
+  layout.dpr = dpr;
+  layout.cssW = cssW;
+  layout.cssH = cssH;
+
+  log('resizeCanvas applied', {
+    dpr,
+    bufferWidth,
+    bufferHeight,
+    cssW,
+    cssH,
+    scale: layout.scale,
+    offsetX,
+    offsetY,
+  });
 }
 
 function sanityPaint(canvas: HTMLCanvasElement): void {
@@ -242,13 +288,16 @@ const handleDOMContentLoaded = (): void => {
     };
 
     resizeCanvas(canvas);
-    bootGame(canvas);
+    bootGame(canvas, getLayout);
     log('bootGame invoked');
 
-    window.addEventListener('resize', () => {
+    const handleResize = (): void => {
       resizeCanvas(canvas);
       makeDebugHud();
-    });
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
 
     wireGate(start);
 

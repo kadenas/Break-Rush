@@ -1,4 +1,4 @@
-import { initInput } from '../engine/input';
+import { initInput, type Layout } from '../engine/input';
 import { createPlayer, drawPlayer, Player, updatePlayer } from '../game/player';
 import { getState } from './state';
 
@@ -11,13 +11,16 @@ let rafId: number | null = null;
 let time = 0;
 let player: Player | null = null;
 
-export const bootGame = (canvas: HTMLCanvasElement): void => {
+export const bootGame = (
+  canvas: HTMLCanvasElement,
+  getLayout: () => Layout
+): void => {
   const context = canvas.getContext('2d');
   if (!context) {
     return;
   }
 
-  initInput(canvas);
+  initInput(canvas, getLayout);
 
   ctx = context;
   player = createPlayer();
