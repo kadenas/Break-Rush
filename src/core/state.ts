@@ -1,16 +1,15 @@
-export type GameState = 'menu' | 'playing' | 'pause' | 'gameover';
+export type GameState = 'menu' | 'playing' | 'gameover';
 
-let currentState: GameState = 'menu';
+let state: GameState = 'menu';
 
-export const setState = (state: GameState): GameState => {
-  currentState = state;
-  return currentState;
-};
+export function setState(s: GameState) {
+  state = s;
+}
 
-export const getState = (): GameState => {
-  return currentState;
-};
+export function getState(): GameState {
+  return state;
+}
 
-export const isPlaying = (): boolean => {
-  return currentState === 'playing';
-};
+export function isPlaying() {
+  return state === 'playing';
+}
