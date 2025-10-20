@@ -42,27 +42,47 @@ export function drawDebugHUD(
   else fpsEMA += 0.1 * (fps - fpsEMA);
   if (ms > 20) dropped++;
 
-  ctx.save();
+  const lines = [
+    `FPS ${fpsEMA.toFixed(1)}  ms ${ms.toFixed(1)}  drop ${dropped}`,
+    `state ${getState()}`,
+    `dpr ${layout.dpr.toFixed(2)}  scale ${layout.scale.toFixed(3)}`,
+    `off ${layout.offX}|${layout.offY}  virt 360x640`,
+    `px ${canvas.width}x${canvas.height}`,
+  ];
 
-  const pad = 6;
-  const line = 12;
-  const width = 190;
-  const height = 5 * line + pad * 2;
+  ctx.save();
+  ctx.font = '10px ui-monospace, Menlo, Consolas, monospace';
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+
+  const padX = 12;
+  const padY = 10;
+  const lineGap = 2;
+  const boxX = 8;
+  const boxY = 8;
+
+  const fontMetrics = ctx.measureText('M');
+  const ascent = fontMetrics.actualBoundingBoxAscent ?? 8;
+  const descent = fontMetrics.actualBoundingBoxDescent ?? 2;
+  const baseHeight = ascent + descent;
+  const textBlockHeight = baseHeight * lines.length + lineGap * Math.max(0, lines.length - 1);
+
+  const maxTextWidth = lines.reduce((width, text) => Math.max(width, ctx.measureText(text).width), 0);
+  const boxW = Math.ceil(maxTextWidth + padX * 2);
+  const boxH = Math.ceil(textBlockHeight + padY * 2);
 
   ctx.globalAlpha = 0.65;
   ctx.fillStyle = '#000';
-  ctx.fillRect(8, 8, width, height);
+  ctx.fillRect(boxX, boxY, boxW, boxH);
   ctx.globalAlpha = 1;
 
   ctx.fillStyle = '#cde3ff';
-  ctx.font = '10px ui-monospace, Menlo, Consolas, monospace';
-  let y = 8 + pad + 9;
-
-  ctx.fillText(`FPS ${fpsEMA.toFixed(1)}  ms ${ms.toFixed(1)}  drop ${dropped}`, 12, y); y += line;
-  ctx.fillText(`state ${getState()}`, 12, y); y += line;
-  ctx.fillText(`dpr ${layout.dpr.toFixed(2)}  scale ${layout.scale.toFixed(3)}`, 12, y); y += line;
-  ctx.fillText(`off ${layout.offX}|${layout.offY}  virt 360x640`, 12, y); y += line;
-  ctx.fillText(`px ${canvas.width}x${canvas.height}`, 12, y);
+  let y = boxY + padY + ascent;
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], boxX + padX, y);
+    y += baseHeight;
+    if (i < lines.length - 1) y += lineGap;
+  }
 
   ctx.restore();
 }
