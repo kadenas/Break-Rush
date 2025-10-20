@@ -1,21 +1,11 @@
-import './styles.css';
-import { bootGame, isGameRunning, renderFrame, startGame } from './core/game';
+import { bootGame, startGame } from './core/game';
 import { unlockAudio } from './engine/audio';
-import { registerServiceWorker } from './pwa/registerSW';
 
 const VIRTUAL_WIDTH = 360;
 const VIRTUAL_HEIGHT = 640;
 
 const clamp = (value: number, min: number, max: number): number => {
   return Math.min(Math.max(value, min), max);
-};
-
-const qs = <T extends Element>(selector: string): T => {
-  const element = document.querySelector<T>(selector);
-  if (!element) {
-    throw new Error(`Missing required element: ${selector}`);
-  }
-  return element;
 };
 
 const resizeCanvas = (canvas: HTMLCanvasElement): void => {
@@ -39,62 +29,112 @@ const resizeCanvas = (canvas: HTMLCanvasElement): void => {
   }
 };
 
-const sanityPaint = (canvas: HTMLCanvasElement): void => {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+const drawBootIndicator = (canvas: HTMLCanvasElement): void => {
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return;
+  }
 
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#b4002f';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const fontSize = Math.max(24, Math.round(canvas.width / 12));
-  ctx.font = `${fontSize}px "Segoe UI", system-ui, sans-serif`;
-  ctx.fillText('BOOT OK', canvas.width / 2, canvas.height / 2);
-  ctx.restore();
+  context.save();
+  context.fillStyle = '#b4002f';
+  context.fillRect(24, 24, 180, 72);
+  context.fillStyle = '#ffffff';
+  context.font = '24px "Segoe UI", system-ui, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText('BOOT OK', 24 + 90, 24 + 36);
+  context.restore();
 };
 
-const init = (): void => {
-  const canvas = qs<HTMLCanvasElement>('#game');
+const setup = (): void => {
+  const canvas = document.getElementById('game') as HTMLCanvasElement | null;
+  if (!canvas) {
+    throw new Error('Game canvas not found');
+  }
 
-  const applyResize = () => {
+  const gate = document.getElementById('gate');
+  const gateButton = document.getElementById('gate-btn') as HTMLButtonElement | null;
+  let gameStarted = false;
+
+  const handleResize = (): void => {
     resizeCanvas(canvas);
-    if (isGameRunning()) {
-      renderFrame();
-    } else {
+    if (!gameStarted) {
       bootGame(canvas);
+      drawBootIndicator(canvas);
     }
   };
 
-  applyResize();
-  window.addEventListener('resize', applyResize);
+  handleResize();
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('orientationchange', handleResize);
 
-  window.addEventListener(
-    'user-start',
-    () => {
-      unlockAudio();
-      sanityPaint(canvas);
-      startGame();
-    },
-    { once: true }
-  );
+  const beginGame = (event: Event): void => {
+    if (gameStarted) {
+      return;
+    }
 
-  canvas.addEventListener(
-    'pointerdown',
-    () => {
-      startGame();
-    },
-    { once: true }
-  );
+    if (event.type === 'touchstart' || event.type === 'keydown') {
+      event.preventDefault();
+    }
+
+    gameStarted = true;
+
+    unlockAudio();
+    startGame();
+
+    if (gate && gate.isConnected) {
+      gate.remove();
+    }
+
+    window.removeEventListener('keydown', beginGame);
+    teardownCanvasListeners();
+  };
+
+  const fallbackStart = (event: Event): void => {
+    beginGame(event);
+  };
+
+  function teardownCanvasListeners(): void {
+    canvas.removeEventListener('pointerdown', fallbackStart);
+    canvas.removeEventListener('touchstart', fallbackStart, { passive: false });
+  }
+
+  const registerStart = (
+    target: EventTarget | null,
+    type: string,
+    options?: AddEventListenerOptions
+  ): void => {
+    if (!target) {
+      return;
+    }
+    target.addEventListener(type, beginGame, options);
+  };
+
+  registerStart(gate, 'pointerdown');
+  registerStart(gate, 'touchstart', { passive: false });
+  registerStart(gate, 'keydown');
+
+  registerStart(gateButton, 'pointerdown');
+  registerStart(gateButton, 'touchstart', { passive: false });
+  registerStart(gateButton, 'keydown');
+  registerStart(window, 'keydown');
+
+  if (gate instanceof HTMLElement) {
+    gate.tabIndex = -1;
+  }
+
+  try {
+    gateButton?.focus({ preventScroll: true });
+  } catch {
+    gateButton?.focus();
+  }
+
+  canvas.addEventListener('pointerdown', fallbackStart);
+  canvas.addEventListener('touchstart', fallbackStart, { passive: false });
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init, { once: true });
+  document.addEventListener('DOMContentLoaded', setup, { once: true });
 } else {
-  init();
+  setup();
 }
-
-registerServiceWorker();

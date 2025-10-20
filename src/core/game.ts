@@ -4,99 +4,110 @@ const VIRTUAL_HEIGHT = 640;
 let canvasRef: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let running = false;
-let rafId = 0;
+let rafId: number | null = null;
 let lastTime = 0;
+let pulse = 0;
 
 export const bootGame = (canvas: HTMLCanvasElement): void => {
   const context = canvas.getContext('2d');
   if (!context) {
-    throw new Error('2D rendering context unavailable');
+    return;
   }
 
   canvasRef = canvas;
   ctx = context;
   running = false;
-  lastTime = 0;
+  pulse = 0;
 
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#0b0f1a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.restore();
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
 
+  lastTime = performance.now();
+  update(0);
   render();
 };
 
 export const startGame = (): void => {
+  if (!ctx || !canvasRef) {
+    return;
+  }
   if (running) {
     return;
   }
-  if (!ctx || !canvasRef) {
-    throw new Error('Game has not been booted');
-  }
 
   running = true;
+  lastTime = performance.now();
 
   const tick = (time: number): void => {
-    if (!running) return;
-    const delta = Math.min((time - lastTime) / 1000, 0.05);
+    if (!running) {
+      return;
+    }
+
+    const dt = Math.min(Math.max((time - lastTime) / 1000, 0), 0.05);
     lastTime = time;
-    update(delta);
+
+    update(dt);
     render();
+
     rafId = requestAnimationFrame(tick);
   };
 
-  rafId = requestAnimationFrame((time) => {
-    lastTime = time;
-    update(0);
-    render();
-    rafId = requestAnimationFrame(tick);
-  });
+  update(0);
+  render();
+  rafId = requestAnimationFrame(tick);
 };
 
 export const stopGame = (): void => {
   if (!running) {
     return;
   }
+
   running = false;
-  cancelAnimationFrame(rafId);
-};
 
-export const isGameRunning = (): boolean => running;
-
-export const renderFrame = (): void => {
-  render();
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
 };
 
 const update = (dt: number): void => {
-  void dt;
+  pulse += dt * 2.4;
 };
 
 const render = (): void => {
-  if (!ctx || !canvasRef) {
+  if (!ctx) {
     return;
   }
 
-  ctx.save();
   ctx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
-  ctx.fillStyle = '#0b0f1a';
+  const gradient = ctx.createLinearGradient(0, 0, 0, VIRTUAL_HEIGHT);
+  gradient.addColorStop(0, '#050b18');
+  gradient.addColorStop(1, '#02040c');
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
-  ctx.globalAlpha = 0.18;
-  ctx.fillStyle = '#1f6feb';
-  ctx.fillRect(24, 24, VIRTUAL_WIDTH - 48, VIRTUAL_HEIGHT - 48);
-  ctx.globalAlpha = 1;
+  const glowStrength = 0.28 + Math.sin(pulse * 2) * 0.12;
+  ctx.fillStyle = `rgba(239, 68, 68, ${glowStrength.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2, 120 + Math.sin(pulse) * 12, 0, Math.PI * 2);
+  ctx.fill();
 
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = 'rgba(14, 165, 233, 0.12)';
+  for (let i = 0; i < 12; i += 1) {
+    const offset = ((pulse * 40 + i * 30) % (VIRTUAL_HEIGHT + 120)) - 60;
+    ctx.fillRect(40 + (i % 3) * 90, offset, 12, 72);
+  }
+
+  ctx.fillStyle = '#f8fafc';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '28px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText('Break Rush', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 - 20);
+  ctx.fillText('Break Rush', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 - 18);
 
-  ctx.fillStyle = '#7dd3fc';
-  ctx.font = '18px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText('Stay tuned for action!', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 + 22);
-
-  ctx.restore();
+  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = '#93c5fd';
+  ctx.fillText('Systems nominal', VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2 + 26);
 };
