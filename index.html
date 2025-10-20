@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0d1117" />
+    <title>Break Rush</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        background: #05060a;
+        touch-action: none;
+        overscroll-behavior: none;
+        height: 100%;
+      }
+      body {
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+      }
+      #app {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      canvas {
+        width: min(100vw, 520px);
+        height: 100vh;
+        max-height: 100vh;
+        display: block;
+        touch-action: none;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
