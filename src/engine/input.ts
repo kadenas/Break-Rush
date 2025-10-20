@@ -9,6 +9,15 @@ type PointerState = {
   y: number;
 };
 
+export interface Layout {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  dpr: number;
+  cssW: number;
+  cssH: number;
+}
+
 let pointerState: PointerState = {
   active: false,
   x: VIRTUAL_WIDTH / 2,
@@ -17,6 +26,7 @@ let pointerState: PointerState = {
 
 let activePointerId: number | null = null;
 let attachedCanvas: HTMLCanvasElement | null = null;
+let layoutGetter: (() => Layout) | null = null;
 
 let handlePointerDown: ((event: PointerEvent) => void) | null = null;
 let handlePointerMove: ((event: PointerEvent) => void) | null = null;
@@ -83,10 +93,30 @@ const detachPointerListeners = (): void => {
     x: VIRTUAL_WIDTH / 2,
     y: (VIRTUAL_HEIGHT * 4) / 5,
   };
+  layoutGetter = null;
 };
 
-export const initInput = (canvas: HTMLCanvasElement): void => {
+export function clientToVirtual(
+  clientX: number,
+  clientY: number,
+  layout: Layout
+): { x: number; y: number } {
+  const safeScale = layout.scale || layout.cssW / VIRTUAL_WIDTH || 1;
+  const virtualX = (clientX - layout.offsetX) / safeScale;
+  const virtualY = (clientY - layout.offsetY) / safeScale;
+
+  return {
+    x: clamp(virtualX, 0, VIRTUAL_WIDTH),
+    y: clamp(virtualY, 0, VIRTUAL_HEIGHT),
+  };
+}
+
+export const initInput = (
+  canvas: HTMLCanvasElement,
+  getLayout: () => Layout
+): void => {
   if (attachedCanvas === canvas) {
+    layoutGetter = getLayout;
     ensureKeyboardListeners();
     return;
   }
@@ -95,9 +125,10 @@ export const initInput = (canvas: HTMLCanvasElement): void => {
   ensureKeyboardListeners();
 
   attachedCanvas = canvas;
+  layoutGetter = getLayout;
 
   handlePointerDown = (event: PointerEvent): void => {
-    if (!attachedCanvas) {
+    if (!attachedCanvas || !layoutGetter) {
       return;
     }
 
@@ -105,7 +136,8 @@ export const initInput = (canvas: HTMLCanvasElement): void => {
       return;
     }
 
-    const { x, y } = clientToVirtual(attachedCanvas, event.clientX, event.clientY);
+    const layout = layoutGetter();
+    const { x, y } = clientToVirtual(event.clientX, event.clientY, layout);
 
     pointerState = {
       active: true,
@@ -124,12 +156,13 @@ export const initInput = (canvas: HTMLCanvasElement): void => {
   };
 
   handlePointerMove = (event: PointerEvent): void => {
-    if (!attachedCanvas) {
+    if (!attachedCanvas || !layoutGetter) {
       return;
     }
 
     if (pointerState.active && activePointerId === event.pointerId) {
-      const { x, y } = clientToVirtual(attachedCanvas, event.clientX, event.clientY);
+      const layout = layoutGetter();
+      const { x, y } = clientToVirtual(event.clientX, event.clientY, layout);
       pointerState = {
         active: true,
         x,
@@ -140,7 +173,7 @@ export const initInput = (canvas: HTMLCanvasElement): void => {
   };
 
   handlePointerUp = (event: PointerEvent): void => {
-    if (!attachedCanvas) {
+    if (!attachedCanvas || !layoutGetter) {
       return;
     }
 
@@ -159,39 +192,12 @@ export const initInput = (canvas: HTMLCanvasElement): void => {
     }
   };
 
-    const passiveFalse = { passive: false } as const;
-    canvas.addEventListener('pointerdown', handlePointerDown, passiveFalse);
-    canvas.addEventListener('pointermove', handlePointerMove as EventListener, passiveFalse);
-    canvas.addEventListener('pointerup', handlePointerUp as EventListener, passiveFalse);
-    canvas.addEventListener('pointercancel', handlePointerUp as EventListener, passiveFalse);
-    canvas.addEventListener('pointerout', handlePointerUp as EventListener, passiveFalse);
-};
-
-export const clientToVirtual = (
-  canvas: HTMLCanvasElement,
-  clientX: number,
-  clientY: number
-): { x: number; y: number } => {
-  const rect = canvas.getBoundingClientRect();
-  const width = rect.width || 1;
-  const height = rect.height || 1;
-
-  const canvasScaleX = canvas.width / width;
-  const canvasScaleY = canvas.height / height;
-
-  const dprX = canvas.width / VIRTUAL_WIDTH || 1;
-  const dprY = canvas.height / VIRTUAL_HEIGHT || 1;
-
-  const canvasX = (clientX - rect.left) * canvasScaleX;
-  const canvasY = (clientY - rect.top) * canvasScaleY;
-
-  const virtualX = canvasX / dprX;
-  const virtualY = canvasY / dprY;
-
-  return {
-    x: clamp(virtualX, 0, VIRTUAL_WIDTH),
-    y: clamp(virtualY, 0, VIRTUAL_HEIGHT),
-  };
+  const passiveFalse = { passive: false } as const;
+  canvas.addEventListener('pointerdown', handlePointerDown, passiveFalse);
+  canvas.addEventListener('pointermove', handlePointerMove as EventListener, passiveFalse);
+  canvas.addEventListener('pointerup', handlePointerUp as EventListener, passiveFalse);
+  canvas.addEventListener('pointercancel', handlePointerUp as EventListener, passiveFalse);
+  canvas.addEventListener('pointerout', handlePointerUp as EventListener, passiveFalse);
 };
 
 export const getPointer = (): PointerState => ({ ...pointerState });

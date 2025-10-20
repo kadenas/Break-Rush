@@ -61,14 +61,16 @@ export const updatePlayer = (player: Player, dt: number): void => {
 
       player.x += dx * player.speedMax * dt;
       player.y += dy * player.speedMax * dt;
-
-      player.tx = player.x;
-      player.ty = player.y;
     }
+
+    player.tx = player.x;
+    player.ty = player.y;
   }
 
   player.x = clamp(player.x, player.r, VIRTUAL_WIDTH - player.r);
   player.y = clamp(player.y, player.r, VIRTUAL_HEIGHT - player.r);
+  player.tx = clamp(player.tx, player.r, VIRTUAL_WIDTH - player.r);
+  player.ty = clamp(player.ty, player.r, VIRTUAL_HEIGHT - player.r);
 };
 
 export const drawPlayer = (
