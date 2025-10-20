@@ -1,87 +1,68 @@
-import { ViewLayout, VW, VH } from './viewport';
+import { ViewLayout } from './viewport';
 import { getState } from '../core/state';
 
-type Stats = {
-  fps: number;          // EMA
-  ms: number;           // last frame ms
-  dropped: number;      // accumulated frames with dt > 20ms
-  frames: number;       // total frames since start
-};
-
-let box: HTMLDivElement | null = null;
 let enabled = false;
-const stats: Stats = { fps: 0, ms: 0, dropped: 0, frames: 0 };
+let fpsEMA = 0;
+let dropped = 0;
 
-function wantEnabledFromEnv(): boolean {
-  const u = new URL(location.href);
-  if (u.searchParams.has('dbg')) return true;
+function wantsEnabled(): boolean {
+  const query = new URL(location.href).searchParams;
+  if (query.has('dbg')) return true;
   if (localStorage.getItem('br_dbg') === '1') return true;
   return false;
 }
 
-export function isDebugEnabled() { return enabled; }
-
 export function initDebug() {
-  enabled = wantEnabledFromEnv();
-  if (!enabled) return;
-
-  box = document.createElement('div');
-  Object.assign(box.style, {
-    position: 'fixed',
-    left: '8px',
-    top: '8px',
-    zIndex: '99',
-    background: 'rgba(0,0,0,0.55)',
-    color: '#cde3ff',
-    font: '12px ui-monospace, Menlo, Consolas, monospace',
-    padding: '6px 8px',
-    borderRadius: '8px',
-    pointerEvents: 'none',
-    whiteSpace: 'pre',
-    lineHeight: '1.25',
-  } as CSSStyleDeclaration);
-  document.body.appendChild(box);
+  enabled = wantsEnabled();
+  fpsEMA = 0;
+  dropped = 0;
 }
 
 export function toggleDebug() {
   enabled = !enabled;
-  if (enabled) {
-    localStorage.setItem('br_dbg', '1');
-    if (!box) initDebug();
-    if (box) box.style.display = 'block';
-  } else {
-    localStorage.removeItem('br_dbg');
-    if (box) box.style.display = 'none';
-  }
+  if (enabled) localStorage.setItem('br_dbg', '1');
+  else localStorage.removeItem('br_dbg');
 }
 
-export function updateDebug(dt: number, layout: ViewLayout, canvas: HTMLCanvasElement) {
-  if (!enabled || !box) return;
+export function isDebugEnabled() {
+  return enabled;
+}
 
-  // frametime and FPS (EMA)
+export function drawDebugHUD(
+  ctx: CanvasRenderingContext2D,
+  dt: number,
+  layout: ViewLayout,
+  canvas: HTMLCanvasElement,
+) {
+  if (!enabled) return;
+
   const ms = Math.max(0, Math.min(200, dt * 1000));
-  stats.ms = ms;
-  stats.frames++;
-  const alpha = 0.1;
-  if (stats.fps === 0) stats.fps = 1000 / Math.max(1, ms);
-  else stats.fps = stats.fps + alpha * ((1000 / Math.max(1, ms)) - stats.fps);
-  if (ms > 20) stats.dropped++;
+  const fps = 1000 / Math.max(1, ms);
+  if (fpsEMA === 0) fpsEMA = fps;
+  else fpsEMA += 0.1 * (fps - fpsEMA);
+  if (ms > 20) dropped++;
 
-  // memory (optional)
-  let mem = '';
-  const pm = (performance as any).memory;
-  if (pm && pm.usedJSHeapSize && pm.jsHeapSizeLimit) {
-    const used = Math.round(pm.usedJSHeapSize / 1048576);
-    const limit = Math.round(pm.jsHeapSizeLimit / 1048576);
-    mem = ` | mem ${used}/${limit} MB`;
-  }
+  ctx.save();
 
-  box.textContent =
-    `FPS ${stats.fps.toFixed(1)}  ` +
-    `ms ${stats.ms.toFixed(1)}  ` +
-    `drop ${stats.dropped}\n` +
-    `state ${getState()}\n` +
-    `dpr ${layout.dpr.toFixed(2)}  scale ${layout.scale.toFixed(3)}\n` +
-    `off ${layout.offX}|${layout.offY}  virt ${VW}x${VH}\n` +
-    `px ${canvas.width}x${canvas.height}${mem}`;
+  const pad = 6;
+  const line = 12;
+  const width = 190;
+  const height = 5 * line + pad * 2;
+
+  ctx.globalAlpha = 0.65;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(8, 8, width, height);
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = '#cde3ff';
+  ctx.font = '10px ui-monospace, Menlo, Consolas, monospace';
+  let y = 8 + pad + 9;
+
+  ctx.fillText(`FPS ${fpsEMA.toFixed(1)}  ms ${ms.toFixed(1)}  drop ${dropped}`, 12, y); y += line;
+  ctx.fillText(`state ${getState()}`, 12, y); y += line;
+  ctx.fillText(`dpr ${layout.dpr.toFixed(2)}  scale ${layout.scale.toFixed(3)}`, 12, y); y += line;
+  ctx.fillText(`off ${layout.offX}|${layout.offY}  virt 360x640`, 12, y); y += line;
+  ctx.fillText(`px ${canvas.width}x${canvas.height}`, 12, y);
+
+  ctx.restore();
 }
