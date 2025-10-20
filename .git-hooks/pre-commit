@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mapfile -t files < <(git diff --cached --name-only)
+if [ ${#files[@]} -eq 0 ]; then
+  exit 0
+fi
+
+python3 - <<'PY'
+import subprocess
+import sys
+
+def is_binary(content: bytes) -> bool:
+    if b"\x00" in content:
+        return True
+    textchars = bytearray({7,8,9,10,12,13,27})
+    textchars.extend(range(0x20, 0x100))
+    return bool(content.translate(None, textchars))
+
+files = sys.argv[1:]
+for path in files:
+    if path.startswith('dist/'):
+        continue
+    try:
+        data = subprocess.check_output(['git', 'show', f':{path}'])
+    except subprocess.CalledProcessError:
+        continue
+    if is_binary(data):
+        print(f"Error: binary file detected in staging area: {path}", file=sys.stderr)
+        sys.exit(1)
+PY
+"${files[@]}"

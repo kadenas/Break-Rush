@@ -1,50 +1,66 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#0d1117" />
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+    />
     <title>Break Rush</title>
     <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0a0a0a" />
     <style>
       :root {
-        color-scheme: light dark;
-        font-family: "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+        color-scheme: dark;
       }
-      html,
       body {
         margin: 0;
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-        background: #05060a;
-        touch-action: none;
-        overscroll-behavior: none;
-        height: 100%;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: #050505;
+        color: #f5f5f5;
+        overscroll-behavior: contain;
       }
-      body {
-        display: flex;
-        align-items: stretch;
-        justify-content: center;
-      }
-      #app {
-        flex: 1;
+      #start-gate {
+        position: fixed;
+        inset: 0;
         display: flex;
         align-items: center;
         justify-content: center;
+        background: rgba(0, 0, 0, 0.9);
+        color: #fff;
+        font-size: 1.5rem;
+        z-index: 9999;
+        touch-action: manipulation;
       }
-      canvas {
-        width: min(100vw, 520px);
-        height: 100vh;
-        max-height: 100vh;
-        display: block;
-        touch-action: none;
-        background: transparent;
+      #start-gate button {
+        padding: 1rem 2rem;
+        font-size: 1.5rem;
+        border: none;
+        border-radius: 999px;
+        background: #00d1ff;
+        color: #03121f;
+        font-weight: 600;
+        box-shadow: 0 12px 24px rgba(0, 209, 255, 0.35);
       }
     </style>
   </head>
   <body>
-    <div id="app">
-      <canvas id="game-canvas"></canvas>
+    <div id="start-gate">
+      <button type="button">Tap to start</button>
     </div>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
+    <script>
+      const gate = document.getElementById('start-gate');
+      const button = gate.querySelector('button');
+      const release = () => {
+        window.dispatchEvent(new CustomEvent('user-start'));
+        gate.remove();
+      };
+      button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        release();
+      }, { passive: false });
+    </script>
   </body>
 </html>

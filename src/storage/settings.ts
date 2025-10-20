@@ -1,55 +1,37 @@
-export type ThemeVariant = 'default' | 'colorblind';
+import { ControlMode } from '../engine/input';
 
-export interface SettingsData {
-  soundEnabled: boolean;
-  hapticsEnabled: boolean;
-  theme: ThemeVariant;
-  useLaneMode: boolean;
+export interface Settings {
+  theme: 'high-contrast' | 'colorblind';
+  sound: boolean;
+  haptics: boolean;
+  controlMode: ControlMode;
 }
 
-const STORAGE_KEY = 'break-rush-settings-v1';
+const KEY = 'break-rush:settings';
 
-const DEFAULT_SETTINGS: SettingsData = {
-  soundEnabled: true,
-  hapticsEnabled: true,
-  theme: 'default',
-  useLaneMode: false
+const DEFAULT_SETTINGS: Settings = {
+  theme: 'high-contrast',
+  sound: true,
+  haptics: true,
+  controlMode: 'drag',
 };
 
-export class SettingsStore {
-  private data: SettingsData = { ...DEFAULT_SETTINGS };
-
-  constructor() {
-    this.load();
+export const loadSettings = (): Settings => {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return { ...DEFAULT_SETTINGS };
+    const parsed = JSON.parse(raw) as Partial<Settings>;
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch (err) {
+    console.warn('Failed to load settings', err);
+    return { ...DEFAULT_SETTINGS };
   }
+};
 
-  get(): SettingsData {
-    return this.data;
+export const saveSettings = (settings: Settings): void => {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(settings));
+  } catch (err) {
+    console.warn('Failed to persist settings', err);
   }
-
-  update(partial: Partial<SettingsData>): SettingsData {
-    this.data = { ...this.data, ...partial };
-    this.persist();
-    return this.data;
-  }
-
-  private load(): void {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as SettingsData;
-        this.data = { ...DEFAULT_SETTINGS, ...parsed };
-      }
-    } catch (error) {
-      console.warn('No se pudieron cargar las preferencias', error);
-    }
-  }
-
-  private persist(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
-    } catch (error) {
-      console.warn('No se pudieron guardar las preferencias', error);
-    }
-  }
-}
+};
