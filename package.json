@@ -1,0 +1,17 @@
+{
+  "name": "break-rush",
+  "version": "1.0.0",
+  "description": "Mobile-first browser game Break Rush built with Vite and TypeScript.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && npm run postbuild",
+    "postbuild": "node ./src/build/postbuild.mjs",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.0"
+  }
+}
