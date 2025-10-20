@@ -1,7 +1,5 @@
 import { getPointer, isKeyDown } from '../engine/input';
-
-const VIRTUAL_WIDTH = 360;
-const VIRTUAL_HEIGHT = 640;
+import { VW, VH } from '../engine/viewport';
 
 export interface Player {
   x: number;
@@ -10,83 +8,42 @@ export interface Player {
   speedMax: number;
 }
 
-export const createPlayer = (): Player => ({
-  x: VIRTUAL_WIDTH / 2,
-  y: VIRTUAL_HEIGHT * 0.8,
-  r: 14,
-  speedMax: 220,
-});
+export function createPlayer(): Player {
+  return { x: VW / 2, y: VH * 0.8, r: 14, speedMax: 220 };
+}
 
-export const updatePlayer = (player: Player, dt: number): void => {
-  const pointer = getPointer();
-
-  if (pointer.active) {
-    const follow = 1 - Math.exp(-dt * 14);
-    player.x += (pointer.x - player.x) * follow;
-    player.y += (pointer.y - player.y) * follow;
+export function updatePlayer(p: Player, dt: number) {
+  const pt = getPointer();
+  if (pt.active) {
+    const k = 0.35;
+    p.x += (pt.x - p.x) * k;
+    p.y += (pt.y - p.y) * k;
   } else {
-    let dx = 0;
-    let dy = 0;
-
-    if (isKeyDown('ArrowLeft') || isKeyDown('KeyA')) {
-      dx -= 1;
-    }
-    if (isKeyDown('ArrowRight') || isKeyDown('KeyD')) {
-      dx += 1;
-    }
-    if (isKeyDown('ArrowUp') || isKeyDown('KeyW')) {
-      dy -= 1;
-    }
-    if (isKeyDown('ArrowDown') || isKeyDown('KeyS')) {
-      dy += 1;
-    }
-
-    if (dx !== 0 || dy !== 0) {
-      const length = Math.hypot(dx, dy) || 1;
-      dx /= length;
-      dy /= length;
-
-      player.x += dx * player.speedMax * dt;
-      player.y += dy * player.speedMax * dt;
+    let dx = 0,
+      dy = 0;
+    if (isKeyDown('ArrowLeft') || isKeyDown('KeyA')) dx -= 1;
+    if (isKeyDown('ArrowRight') || isKeyDown('KeyD')) dx += 1;
+    if (isKeyDown('ArrowUp') || isKeyDown('KeyW')) dy -= 1;
+    if (isKeyDown('ArrowDown') || isKeyDown('KeyS')) dy += 1;
+    if (dx || dy) {
+      const len = Math.hypot(dx, dy) || 1;
+      dx /= len;
+      dy /= len;
+      p.x += dx * p.speedMax * dt;
+      p.y += dy * p.speedMax * dt;
     }
   }
+  p.x = Math.max(p.r, Math.min(VW - p.r, p.x));
+  p.y = Math.max(p.r, Math.min(VH - p.r, p.y));
+}
 
-  player.x = Math.max(player.r, Math.min(VIRTUAL_WIDTH - player.r, player.x));
-  player.y = Math.max(player.r, Math.min(VIRTUAL_HEIGHT - player.r, player.y));
-};
-
-export const drawPlayer = (
-  ctx: CanvasRenderingContext2D,
-  player: Player,
-  dpr: number
-): void => {
-  const px = player.x * dpr;
-  const py = player.y * dpr;
-  const radius = player.r * dpr;
-
-  ctx.save();
-
-  ctx.fillStyle = 'rgba(6, 22, 36, 0.35)';
+export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player) {
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.arc(px, py + radius * 0.55, radius * 1.05, 0, Math.PI * 2);
+  ctx.arc(p.x + p.r * 0.15, p.y + p.r * 0.15, p.r, 0, Math.PI * 2);
   ctx.fill();
-
-  const gradient = ctx.createRadialGradient(
-    px - radius * 0.4,
-    py - radius * 0.6,
-    radius * 0.25,
-    px,
-    py,
-    radius
-  );
-  gradient.addColorStop(0, '#e0faff');
-  gradient.addColorStop(0.5, '#5eead4');
-  gradient.addColorStop(1, '#0891b2');
-
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = '#00e5ff';
   ctx.beginPath();
-  ctx.arc(px, py, radius, 0, Math.PI * 2);
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
   ctx.fill();
-
-  ctx.restore();
-};
+}
