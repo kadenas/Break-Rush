@@ -1,9 +1,8 @@
-import { bootGame, startGame, restartRun } from './core/game';
+import { bootGame, startGame } from './core/game';
 import { unlockAudio } from './engine/audio';
-import { setState, getState } from './core/state';
+import { setState } from './core/state';
 import { initInput } from './engine/input';
 import { computeLayout } from './engine/viewport';
-import { toggleDebug } from './engine/debug';
 
 function qs<T extends HTMLElement>(sel: string): T {
   const el = document.querySelector(sel) as T | null;
@@ -31,7 +30,7 @@ function wireGate(startCb: () => void) {
     try {
       unlockAudio();
     } catch {}
-    setState('playing');
+    setState('menu');
     startCb();
     gate?.remove();
   };
@@ -54,26 +53,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
   initInput(canvas);
   bootGame(canvas);
+  startGame();
 
-  const start = () => startGame();
-  wireGate(start);
-
-  // F toggles overlay
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyF') toggleDebug();
+  wireGate(() => {
+    /* loop arrancado arriba */
   });
-
-  canvas.addEventListener(
-    'pointerdown',
-    () => {
-      const st = getState();
-      if (st === 'menu') {
-        restartRun();
-        start();
-      } else if (st === 'gameover') {
-        restartRun();
-      }
-    },
-    { once: false },
-  );
 });
