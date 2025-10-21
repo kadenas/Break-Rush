@@ -28,7 +28,14 @@ import {
   onHit as audioOnHit,
   onRetry as audioOnRetry,
 } from '../fx/audio';
-import { installGlobalUnlock, unlockThenStart } from '../audio/unlock';
+import { unlockSync } from '../audio/audioManager';
+
+let started = false;
+function startGameSafe() {
+  if (started) return;
+  started = true;
+  startGame();
+}
 
 let running = false;
 let raf = 0;
@@ -91,7 +98,7 @@ const goPlay = () => {
   levelBannerT = 0;
   levelShown = 1;
   nextMilestone = 100;
-  if (settings.music) {
+  if (started && settings.music) {
     if (prevState === 'gameover') {
       audioOnRetry();
     } else {
@@ -116,24 +123,53 @@ export function bootGame(c: HTMLCanvasElement) {
   const fireGate = () => {
     if (gateFired) return;
     gateFired = true;
-    audioToIntro();
+    if (started) {
+      audioToIntro();
+    }
     setState('menu');
     gate?.remove();
   };
-  const startFromGesture = () => {
-    void unlockThenStart(fireGate);
-  };
   if (btn) {
     btn.addEventListener(
-      'pointerdown',
+      'click',
       (event) => {
         event.preventDefault();
-        startFromGesture();
+        unlockSync();
+        startGameSafe();
+        fireGate();
       },
-      { once: true }
+      { once: true, capture: true }
     );
   }
-  installGlobalUnlock(fireGate);
+  const touchOptions: AddEventListenerOptions = { once: true, capture: true, passive: true };
+  window.addEventListener(
+    'touchend',
+    () => {
+      unlockSync();
+      startGameSafe();
+      fireGate();
+    },
+    touchOptions
+  );
+  const pointerOptions: AddEventListenerOptions = { once: true, capture: true };
+  window.addEventListener(
+    'pointerdown',
+    () => {
+      unlockSync();
+      startGameSafe();
+      fireGate();
+    },
+    pointerOptions
+  );
+  window.addEventListener(
+    'keydown',
+    () => {
+      unlockSync();
+      startGameSafe();
+      fireGate();
+    },
+    pointerOptions
+  );
 
   clearButtons();
   // constantes de layout UI
@@ -175,7 +211,9 @@ export function bootGame(c: HTMLCanvasElement) {
     label: 'II',
     visible: () => getState() === 'playing',
     onClick: () => {
-      stopMusic();
+      if (started) {
+        stopMusic();
+      }
       setState('pause');
     },
   });
@@ -190,7 +228,7 @@ export function bootGame(c: HTMLCanvasElement) {
     label: 'Resume',
     visible: () => getState() === 'pause',
     onClick: () => {
-      if (settings.music) {
+      if (started && settings.music) {
         audioStartGame();
       }
       setState('playing');
@@ -225,10 +263,14 @@ export function bootGame(c: HTMLCanvasElement) {
     label: 'Menu',
     visible: () => getState() === 'pause',
     onClick: () => {
-      stopMusic();
+      if (started) {
+        stopMusic();
+      }
       resetMessages();
       setState('menu');
-      audioToIntro();
+      if (started) {
+        audioToIntro();
+      }
     },
   });
 
@@ -262,10 +304,14 @@ export function bootGame(c: HTMLCanvasElement) {
     label: 'Menu',
     visible: () => getState() === 'gameover',
     onClick: () => {
-      stopMusic();
+      if (started) {
+        stopMusic();
+      }
       resetMessages();
       setState('menu');
-      audioToIntro();
+      if (started) {
+        audioToIntro();
+      }
     },
   });
 
@@ -332,7 +378,9 @@ export function bootGame(c: HTMLCanvasElement) {
     visible: () => getState() === 'settings',
     onClick: () => {
       setState('menu');
-      audioToIntro();
+      if (started) {
+        audioToIntro();
+      }
     },
   });
 }
@@ -393,7 +441,9 @@ function loop(now: number) {
       const o = obs.pool[idx];
       if (!o.alive) continue;
       if (collideCircle(player.x, player.y, player.r, o)) {
-        audioOnHit();
+        if (started) {
+          audioOnHit();
+        }
         commitBest(obs);
         if (settings.vibe && 'vibrate' in navigator) {
           try {
