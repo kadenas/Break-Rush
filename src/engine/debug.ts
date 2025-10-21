@@ -1,5 +1,6 @@
 import { ViewLayout } from './viewport';
 import { getState } from '../core/state';
+import { getSettings } from '../ui/ui';
 
 let enabled = false;
 let fpsEMA = 0;
@@ -45,6 +46,7 @@ export function drawDebugHUD(
   const lines = [
     `FPS ${fpsEMA.toFixed(1)}  ms ${ms.toFixed(1)}  drop ${dropped}`,
     `state ${getState()}`,
+    `LP ${getSettings().lowPower ? 'on' : 'off'}`,
     `dpr ${layout.dpr.toFixed(2)}  scale ${layout.scale.toFixed(3)}`,
     `off ${layout.offX}|${layout.offY}  virt 360x640`,
     `px ${canvas.width}x${canvas.height}`,

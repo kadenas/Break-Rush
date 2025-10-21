@@ -13,7 +13,19 @@ import {
   getActiveCount,
 } from '../game/obstacles';
 import { getClick } from '../engine/input';
-import { initUI, UIButton, drawUI, registerButton, hitUI } from '../ui/ui';
+import {
+  initUI,
+  UIButton,
+  UICheckbox,
+  drawUI,
+  registerButton,
+  registerCheckbox,
+  hitUI,
+  getSettings,
+  setSetting,
+  onSettingsChanged,
+} from '../ui/ui';
+import type { UISettings } from '../ui/ui';
 
 let running = false;
 let raf = 0;
@@ -21,9 +33,12 @@ let last = 0;
 let canvas: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D;
 let debugHotkeyBound = false;
+let showingSettings = false;
 
 const player = createPlayer();
 const obstacles = createObSystem();
+
+const LOW_POWER_FRAME_MS = 1000 / 45;
 
 const INVULN_DURATION = 0.8;
 const INVULN_BLINK_INTERVAL = 0.09;
@@ -33,10 +48,25 @@ const CAMERA_SHAKE_AMPLITUDE = 6;
 let invulnTimer = 0;
 let cameraShakeTimer = 0;
 
+onSettingsChanged((settings, key) => {
+  if (key === 'fx') {
+    if (settings.fx) resetPlayerTrail(player);
+    else player.trail.length = 0;
+  }
+  if (key === 'lowPower') {
+    last = performance.now();
+  }
+});
+
+if (!getSettings().fx) {
+  player.trail.length = 0;
+}
+
 function resetRun() {
   player.x = VW / 2;
   player.y = VH * 0.8;
-  resetPlayerTrail(player);
+  if (getSettings().fx) resetPlayerTrail(player);
+  else player.trail.length = 0;
   resetObstacles(obstacles);
   invulnTimer = INVULN_DURATION;
   cameraShakeTimer = 0;
@@ -54,7 +84,7 @@ function registerButtons() {
       w: 140,
       h: 48,
       label: 'Start',
-      visible: () => getState() === 'menu',
+      visible: () => getState() === 'menu' && !showingSettings,
       onClick: () => {
         resetRun();
         setState('playing');
@@ -104,7 +134,10 @@ function registerButtons() {
         const state = getState();
         return state === 'pause' || state === 'gameover';
       },
-      onClick: () => setState('menu'),
+      onClick: () => {
+        showingSettings = false;
+        setState('menu');
+      },
     },
     {
       id: 'retry',
@@ -119,9 +152,79 @@ function registerButtons() {
         setState('playing');
       },
     },
+    {
+      id: 'settings',
+      x: centerX - 70,
+      y: centerY + 88,
+      w: 140,
+      h: 44,
+      label: 'Settings',
+      visible: () => getState() === 'menu' && !showingSettings,
+      onClick: () => {
+        showingSettings = true;
+      },
+    },
+    {
+      id: 'settings-back',
+      x: centerX - 70,
+      y: centerY + 88,
+      w: 140,
+      h: 44,
+      label: 'Back',
+      visible: () => getState() === 'menu' && showingSettings,
+      onClick: () => {
+        showingSettings = false;
+      },
+    },
   ];
 
   for (const button of buttons) registerButton(button);
+
+  const toggleWidth = 220;
+  const toggleHeight = 44;
+  const toggleX = centerX - toggleWidth / 2;
+  const toggleStartY = centerY - 60;
+
+  const checkboxes: UICheckbox[] = [
+    {
+      kind: 'checkbox',
+      id: 'toggle-vibration',
+      x: toggleX,
+      y: toggleStartY,
+      w: toggleWidth,
+      h: toggleHeight,
+      label: 'Vibration',
+      visible: () => getState() === 'menu' && showingSettings,
+      checked: () => getSettings().vibration,
+      onToggle: (value) => setSetting('vibration', value),
+    },
+    {
+      kind: 'checkbox',
+      id: 'toggle-fx',
+      x: toggleX,
+      y: toggleStartY + toggleHeight + 12,
+      w: toggleWidth,
+      h: toggleHeight,
+      label: 'Effects',
+      visible: () => getState() === 'menu' && showingSettings,
+      checked: () => getSettings().fx,
+      onToggle: (value) => setSetting('fx', value),
+    },
+    {
+      kind: 'checkbox',
+      id: 'toggle-lowpower',
+      x: toggleX,
+      y: toggleStartY + (toggleHeight + 12) * 2,
+      w: toggleWidth,
+      h: toggleHeight,
+      label: 'Low power (45 fps)',
+      visible: () => getState() === 'menu' && showingSettings,
+      checked: () => getSettings().lowPower,
+      onToggle: (value) => setSetting('lowPower', value),
+    },
+  ];
+
+  for (const checkbox of checkboxes) registerCheckbox(checkbox);
 }
 
 export function bootGame(c: HTMLCanvasElement) {
@@ -163,7 +266,7 @@ function processClick(x: number, y: number) {
   if (state === 'gameover') {
     resetRun();
     setState('playing');
-  } else if (state === 'menu') {
+  } else if (state === 'menu' && !showingSettings) {
     resetRun();
     setState('playing');
   }
@@ -171,6 +274,16 @@ function processClick(x: number, y: number) {
 
 function loop(now: number) {
   if (!running) return;
+
+  const settings = getSettings();
+  if (settings.lowPower) {
+    const elapsedMs = now - last;
+    if (elapsedMs < LOW_POWER_FRAME_MS) {
+      raf = requestAnimationFrame(loop);
+      return;
+    }
+  }
+
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
@@ -178,11 +291,14 @@ function loop(now: number) {
   if (click) processClick(click.x, click.y);
 
   const state = getState();
+  if (state !== 'menu' && showingSettings) showingSettings = false;
+
   if (state === 'playing') {
     if (invulnTimer > 0) invulnTimer = Math.max(0, invulnTimer - dt);
     updatePlayer(player, dt);
     ensureKickstart(obstacles);
     updateObstacles(obstacles, dt);
+    if (!settings.fx) player.trail.length = 0;
 
     for (const index of obstacles.active) {
       const obstacle = obstacles.pool[index];
@@ -192,16 +308,26 @@ function loop(now: number) {
         setState('gameover');
         invulnTimer = 0;
         cameraShakeTimer = CAMERA_SHAKE_DURATION;
+        if (settings.vibration && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try {
+            navigator.vibrate(160);
+          } catch {
+            // ignore vibration errors
+          }
+        }
         break;
       }
     }
+  } else if (state === 'pause') {
+    // keep timers frozen by resetting last to current time slice
+    last = now;
   }
 
-  render(dt);
+  render(dt, settings);
   raf = requestAnimationFrame(loop);
 }
 
-function render(dt: number) {
+function render(dt: number, settings: UISettings) {
   const layout = computeLayout();
   const wantW = Math.floor(layout.vwCss * layout.dpr);
   const wantH = Math.floor(layout.vhCss * layout.dpr);
@@ -215,13 +341,15 @@ function render(dt: number) {
 
   let shakeX = 0;
   let shakeY = 0;
+  const state = getState();
+  const timerDt = state === 'pause' ? 0 : dt;
   if (cameraShakeTimer > 0) {
     const t = cameraShakeTimer / CAMERA_SHAKE_DURATION;
     const amplitude = CAMERA_SHAKE_AMPLITUDE * t;
     const angle = Math.random() * Math.PI * 2;
     shakeX = Math.cos(angle) * amplitude;
     shakeY = Math.sin(angle) * amplitude;
-    cameraShakeTimer = Math.max(0, cameraShakeTimer - dt);
+    cameraShakeTimer = Math.max(0, cameraShakeTimer - timerDt);
   }
 
   applyRenderTransform(ctx, layout);
@@ -229,22 +357,29 @@ function render(dt: number) {
   ctx.fillStyle = '#0b1f33';
   ctx.fillRect(0, 0, VW, VH);
 
-  const state = getState();
   if (state === 'menu') {
     ctx.fillStyle = 'rgba(150,40,40,0.45)';
     ctx.beginPath();
     ctx.arc(VW * 0.5, VH * 0.6, VW * 0.45, 0, Math.PI * 2);
     ctx.fill();
+    ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 28px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('Break Rush', VW * 0.5, VH * 0.55);
-    ctx.font = '16px system-ui';
-    ctx.fillStyle = '#9cc2ff';
-    ctx.fillText('Evita los meteoritos', VW * 0.5, VH * 0.62);
+    ctx.fillText('Break Rush', VW * 0.5, VH * 0.5);
+    if (showingSettings) {
+      ctx.font = 'bold 22px system-ui';
+      ctx.fillText('Settings', VW * 0.5, VH * 0.58);
+      ctx.font = '14px system-ui';
+      ctx.fillStyle = '#9cc2ff';
+      ctx.fillText('Personaliza las opciones del juego', VW * 0.5, VH * 0.65);
+    } else {
+      ctx.font = '16px system-ui';
+      ctx.fillStyle = '#9cc2ff';
+      ctx.fillText('Evita los meteoritos', VW * 0.5, VH * 0.6);
+    }
   } else {
     drawObstacles(ctx, obstacles);
-    drawTrail(ctx, player);
+    if (settings.fx) drawTrail(ctx, player);
 
     const blinkElapsed = Math.max(0, INVULN_DURATION - invulnTimer);
     const blinkToggle = Math.floor(blinkElapsed / INVULN_BLINK_INTERVAL) % 2 === 0;
