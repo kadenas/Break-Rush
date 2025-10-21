@@ -1,9 +1,10 @@
 import { VW, VH } from '../engine/viewport';
 
+const POOL_SIZE = 64;
+const LANES = 5;
+
 export interface Ob {
-  x: number;
-  y: number;
-  r: number;
+  x: number; y: number; r: number;
   vy: number;
   alive: boolean;
   scored: boolean;
@@ -30,16 +31,10 @@ export function createObSystem(): ObSystem {
   const best = Number(localStorage.getItem('br_best') || '0') || 0;
   return {
     pool: Array.from({ length: POOL_SIZE }, () => ({
-      x: 0,
-      y: -100,
-      r: 12,
-      vy: 120,
-      alive: false,
-      scored: false,
-      lane: -1,
-      spawnTime: -1,
-      scoreValue: 10,
-      big: false,
+      x: 0, y: -100, r: 12, vy: 120,
+      alive: false, scored: false,
+      lane: -1, spawnTime: -1,
+      scoreValue: 10, big: false
     })),
     active: [],
     tSpawn: 0,
@@ -60,6 +55,10 @@ function alloc(sys: ObSystem): Ob | null {
       sys.active.push(i);
       o.alive = true;
       o.scored = false;
+      o.big = false;
+      o.lane = -1;
+      o.spawnTime = -1;
+      o.scoreValue = 10;
       return o;
     }
   }
@@ -78,22 +77,6 @@ export function resetObstacles(sys: ObSystem) {
   sys.waveIntensity = 0;
 }
 
-function allocate(sys: ObstacleSystem): Obstacle | null {
-  for (let i = 0; i < sys.pool.length; i++) {
-    const ob = sys.pool[i];
-    if (!ob.alive) {
-      sys.active.push(i);
-      ob.alive = true;
-      ob.scored = false;
-      ob.big = false;
-      return ob;
-    }
-  }
-  return null;
-}
-
-const LANES = 5;
-
 function shuffleLanes(): number[] {
   const order = Array.from({ length: LANES }, (_, i) => i);
   for (let i = order.length - 1; i > 0; i--) {
@@ -104,94 +87,77 @@ function shuffleLanes(): number[] {
 }
 
 function easeOutCubic(t: number) {
-  const inv = 1 - Math.min(Math.max(t, 0), 1);
-  return 1 - inv * inv * inv;
+  const u = 1 - Math.min(Math.max(t, 0), 1);
+  return 1 - u * u * u;
 }
 
-function getWaveIntensity(sys: ObstacleSystem) {
+function getWaveIntensity(sys: ObSystem) {
   const WAVE_LENGTH = 15;
   const COOL_LENGTH = 5;
   const TOTAL = WAVE_LENGTH + COOL_LENGTH;
-  let t = sys.waveTimer % TOTAL;
-  if (t < WAVE_LENGTH) {
-    return t / WAVE_LENGTH;
-  }
+  const t = sys.waveTimer % TOTAL;
+  if (t < WAVE_LENGTH) return t / WAVE_LENGTH;
   const coolT = (t - WAVE_LENGTH) / COOL_LENGTH;
   return 1 - easeOutCubic(coolT) * 0.4;
 }
 
-function canSpawnInLane(
-  sys: ObstacleSystem,
-  lane: number,
-  spawnY: number,
-): boolean {
+function canSpawnInLane(sys: ObSystem, lane: number, spawnY: number): boolean {
   for (const index of sys.active) {
     const other = sys.pool[index];
     if (!other.alive || other.lane !== lane) continue;
     if (other.spawnTime < 0) continue;
     if (sys.elapsed - other.spawnTime > 0.6) continue;
-    if (Math.abs(other.y - spawnY) < 70) {
-      return false;
-    }
+    if (Math.abs(other.y - spawnY) < 70) return false;
   }
   return true;
 }
 
-function spawn(sys: ObstacleSystem) {
-  const obstacle = allocate(sys);
-  if (!obstacle) return;
+function spawn(sys: ObSystem) {
+  const o = alloc(sys);
+  if (!o) return;
 
   const laneWidth = VW / LANES;
-  const waveIntensity = sys.waveIntensity;
-  const baseSpeed = 140;
-  const baseRadius = 12 + Math.min(16, sys.elapsed * 0.35);
-  const isBig = Math.random() < 0.1;
-  const radiusMultiplier = isBig ? 1.6 : 1;
-  const radius = baseRadius * radiusMultiplier;
-
   const laneOrder = shuffleLanes();
-  let selectedLane = -1;
+
+  const baseRadius = 12 + Math.min(16, sys.elapsed * 0.35);
+  const isBig = Math.random() < 0.10;
+  const r = baseRadius * (isBig ? 1.6 : 1);
+
+  let chosenLane = -1;
   let spawnX = 0;
-  let spawnY = 0;
-  let laneCenter = 0;
+  const spawnY = -r - 12;
 
   for (const lane of laneOrder) {
-    laneCenter = laneWidth * (lane + 0.5);
-    const proposedY = -radius - 12;
-    if (!canSpawnInLane(sys, lane, proposedY)) {
-      continue;
-    }
-    selectedLane = lane;
+    const laneCenter = laneWidth * (lane + 0.5);
+    if (!canSpawnInLane(sys, lane, spawnY)) continue;
+    chosenLane = lane;
     spawnX = laneCenter + (Math.random() * (laneWidth * 0.45) - laneWidth * 0.225);
-    spawnY = proposedY;
     break;
   }
 
-  if (selectedLane === -1) {
-    obstacle.alive = false;
-    obstacle.lane = -1;
+  if (chosenLane === -1) {
+    o.alive = false;
     sys.active.pop();
     return;
   }
 
-  const speedBonus = waveIntensity * 120;
+  const baseSpeed = 140;
+  const speedBonus = sys.waveIntensity * 120;
   const vy = (baseSpeed + speedBonus) * (isBig ? 0.75 : 1);
 
-  obstacle.x = spawnX;
-  obstacle.y = spawnY;
-  obstacle.r = radius;
-  obstacle.vy = vy;
-  obstacle.lane = selectedLane;
-  obstacle.spawnTime = sys.elapsed;
-  obstacle.scoreValue = isBig ? 30 : 10;
-  obstacle.big = isBig;
+  Object.assign(o, {
+    x: spawnX, y: spawnY, r,
+    vy, lane: chosenLane,
+    spawnTime: sys.elapsed,
+    scoreValue: isBig ? 30 : 10,
+    big: isBig
+  });
+
   sys.kicked = true;
 }
 
 export function ensureKickstart(sys: ObSystem) {
-  if (!sys.kicked && sys.elapsed > 0.4) {
-    spawn(sys);
-  }
+  if (!sys.kicked && sys.elapsed > 0.4) spawn(sys);
 }
 
 export function updateObstacles(sys: ObSystem, dt: number) {
@@ -199,12 +165,9 @@ export function updateObstacles(sys: ObSystem, dt: number) {
   sys.tSpawn += dt;
   sys.waveTimer += dt;
 
-  const waveIntensity = getWaveIntensity(sys);
-  sys.waveIntensity = waveIntensity;
-
-  const baseSpawn = 0.9;
-  const targetEvery = Math.max(0.35, baseSpawn - waveIntensity * 0.25);
-  sys.spawnEvery = targetEvery;
+  sys.waveIntensity = getWaveIntensity(sys);
+  const baseEvery = 0.9;
+  sys.spawnEvery = Math.max(0.35, baseEvery - sys.waveIntensity * 0.25);
 
   if (sys.tSpawn >= sys.spawnEvery) {
     sys.tSpawn = 0;
@@ -212,19 +175,15 @@ export function updateObstacles(sys: ObSystem, dt: number) {
   }
 
   for (let a = sys.active.length - 1; a >= 0; a--) {
-    const i = sys.active[a];
-    const o = sys.pool[i];
-    if (!o.alive) {
-      sys.active.splice(a, 1);
-      continue;
-    }
+    const idx = sys.active[a];
+    const o = sys.pool[idx];
+    if (!o.alive) { sys.active.splice(a, 1); continue; }
+
     o.y += o.vy * dt;
 
-    ob.y += ob.vy * dt;
-
-    if (!ob.scored && ob.y - ob.r > VH) {
-      sys.score += ob.scoreValue;
-      ob.scored = true;
+    if (!o.scored && o.y - o.r > VH) {
+      sys.score += o.scoreValue;
+      o.scored = true;
     }
     if (o.y - o.r > VH + 40) {
       o.alive = false;
@@ -236,39 +195,33 @@ export function updateObstacles(sys: ObSystem, dt: number) {
 }
 
 export function collideCircle(px: number, py: number, pr: number, o: Ob): boolean {
-  const dx = o.x - px;
-  const dy = o.y - py;
+  const dx = o.x - px, dy = o.y - py;
   const rr = o.r + pr;
   return dx * dx + dy * dy <= rr * rr;
 }
 
 export function drawObstacles(ctx: CanvasRenderingContext2D, sys: ObSystem) {
-  for (const i of sys.active) {
-    const o = sys.pool[i];
-    // shadow
+  for (const idx of sys.active) {
+    const o = sys.pool[idx];
     ctx.globalAlpha = 0.22;
     ctx.beginPath();
     ctx.arc(o.x, o.y + o.r * 0.35, o.r * 1.25, 0, Math.PI * 2);
     ctx.fillStyle = '#041a28';
     ctx.fill();
     ctx.globalAlpha = 1;
-    // body gradient
+
     const g = ctx.createRadialGradient(
-      o.x - o.r * 0.35,
-      o.y - o.r * 0.35,
-      o.r * 0.1,
-      o.x,
-      o.y,
-      o.r,
+      o.x - o.r * 0.35, o.y - o.r * 0.35, o.r * 0.1,
+      o.x,               o.y,              o.r
     );
-    g.addColorStop(0.0, '#b8f7ff');
+    g.addColorStop(0.00, '#b8f7ff');
     g.addColorStop(0.45, '#54d0e0');
-    g.addColorStop(1.0, '#1aa2b4');
+    g.addColorStop(1.00, '#1aa2b4');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
     ctx.fill();
-    // rim
+
     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 0.9;
     ctx.beginPath();
@@ -284,14 +237,6 @@ export function commitBest(sys: ObSystem) {
   }
 }
 
-export function getActiveCount(sys: ObSystem) {
-  return sys.active.length;
-}
-
-export function getScore(sys: ObSystem) {
-  return Math.floor(sys.score);
-}
-
-export function getBest(sys: ObSystem) {
-  return sys.best;
-}
+export function getActiveCount(sys: ObSystem){ return sys.active.length; }
+export function getScore(sys: ObSystem){ return Math.floor(sys.score); }
+export function getBest(sys: ObSystem){ return sys.best; }
