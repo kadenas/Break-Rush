@@ -97,6 +97,7 @@ export const AudioManager = (() => {
       }
     }
 
+    console.warn('[AUDIO] Missing file:', name);
     return undefined;
   };
 

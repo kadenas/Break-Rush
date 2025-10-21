@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/copyAssets.js",
     "dev": "vite",
     "build": "vite build",
     "postbuild": "node --loader ts-node/esm src/build/postbuild.ts",
