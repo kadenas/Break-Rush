@@ -75,27 +75,34 @@ export function drawTrail(ctx: CanvasRenderingContext2D, p: Player) {
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player, alpha = 1) {
-  // soft ground halo
-  ctx.globalAlpha = 0.25;
-  ctx.beginPath(); ctx.arc(p.x, p.y + p.r*0.35, p.r*1.35, 0, Math.PI*2); ctx.fillStyle = '#052236'; ctx.fill();
+  // Capa de desvanecimiento (estela)
+  ctx.globalAlpha = 0.15;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, VW, VH);
   ctx.globalAlpha = alpha;
 
-  // glossy gradient
-  const g = ctx.createRadialGradient(p.x - p.r*0.35, p.y - p.r*0.35, p.r*0.1, p.x, p.y, p.r);
-  g.addColorStop(0.00,'#e9ffff');
-  g.addColorStop(0.25,'#bffbff');
-  g.addColorStop(0.60,'#46e6f4');
-  g.addColorStop(1.00,'#00cfe0');
+  // Bola
+  const g = ctx.createRadialGradient(
+    p.x - p.r * 0.3,
+    p.y - p.r * 0.3,
+    p.r * 0.1,
+    p.x,
+    p.y,
+    p.r,
+  );
+  g.addColorStop(0, '#baf5ff');
+  g.addColorStop(0.4, '#3fd0e9');
+  g.addColorStop(1, '#178ba4');
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fill();
 
-  // rim light
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-  ctx.lineWidth = 1.0;
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r-0.8, -Math.PI*0.2, Math.PI*0.2); ctx.stroke();
-
-  // specular
-  ctx.globalAlpha = Math.min(0.85, alpha);
-  ctx.beginPath(); ctx.arc(p.x - p.r*0.35, p.y - p.r*0.38, p.r*0.28, 0, Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+  // Brillo exterior
   ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r - 0.5, 0, Math.PI * 2);
+  ctx.stroke();
 }

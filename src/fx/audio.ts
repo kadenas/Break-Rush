@@ -14,9 +14,9 @@ export function audioInit(opts?: { music?: boolean; sfx?: boolean }) {
   musicEnabled = opts?.music ?? (localStorage.getItem('br_music') !== '0');
   sfxEnabled = opts?.sfx ?? (localStorage.getItem('br_fx') !== '0');
 
-  // Intentamos cargar, pero si faltan, no pasa nada.
+  // Si existen los archivos, los usa; si no, ignora.
   try {
-    tracks.music = new Audio('/audio/loop.ogg');
+    tracks.music = new Audio('/audio/loop.mp3');
     tracks.music.loop = true;
     tracks.music.volume = 0.35;
   } catch {
