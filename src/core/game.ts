@@ -327,6 +327,7 @@ function loop(now: number) {
           }
         }
         stopMusic();
+        playSfx('crash'); // sonido sintético sin binarios
         setState('gameover');
         break;
       }
@@ -338,89 +339,69 @@ function loop(now: number) {
 }
 
 function render(dt: number) {
-  const layout = computeLayout();
-  const wantW = Math.floor(layout.vwCss * layout.dpr);
-  const wantH = Math.floor(layout.vhCss * layout.dpr);
-  if (canvas.width !== wantW || canvas.height !== wantH) {
-    canvas.width = wantW;
-    canvas.height = wantH;
-  }
+  // Resize canvas si cambia el viewport
+  const L = computeLayout();
+  const wantW = Math.floor(L.vwCss * L.dpr);
+  const wantH = Math.floor(L.vhCss * L.dpr);
+  if (canvas.width !== wantW || canvas.height !== wantH) { canvas.width = wantW; canvas.height = wantH; }
 
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  applyRenderTransform(ctx, layout);
+  // Reset transform y aplicar escala virtual
+  ctx.setTransform(1,0,0,1,0,0);
+  applyRenderTransform(ctx, L);
 
+  // 1) Fading de frame para crear estela (NO clearRect)
+  applyFrameFade(ctx, 0.12);  // 12% de oscurecido suave
+
+  // 2) Fondo dinámico con alpha, para no borrar la estela
   const wave = getWave(obs);
-  drawReactiveBackground(ctx, wave);
+  drawReactiveBackground(ctx, wave, 0.35); // 35% opacidad
 
   const st = getState();
-  if (st === 'menu') {
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('Break Rush', VW * 0.5, VH * 0.42);
-    ctx.fillStyle = '#9cc2ff';
-    ctx.font = '16px system-ui';
-    ctx.fillText('Evita los meteoritos', VW * 0.5, VH * 0.48);
-  } else if (st === 'settings') {
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 24px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('Settings', VW * 0.5, VH * 0.34);
-  } else {
+
+  // 3) Dibujo del juego
+  if (st !== 'menu' && st !== 'settings') {
     drawObstacles(ctx, obs);
     drawPlayer(ctx, player);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = '16px system-ui';
-    ctx.textAlign = 'left';
+    // HUD (score y best)
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.font='16px system-ui'; ctx.textAlign='left';
     ctx.fillText(`Score ${getScore(obs)}`, 8, 22);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = '12px system-ui';
-    ctx.fillText(`Best ${getBest(obs)}`, 8, 38);
+    ctx.fillStyle='rgba(255,255,255,0.6)';
+    ctx.font='12px system-ui'; ctx.fillText(`Best ${getBest(obs)}`, 8, 38);
 
     if (st === 'pause' || st === 'gameover') {
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(0, 0, VW, VH);
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.font = 'bold 26px system-ui';
-      ctx.fillText(st === 'pause' ? 'PAUSE' : 'GAME OVER', VW * 0.5, VH * 0.40);
+      ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(0,0,VW,VH);
+      ctx.fillStyle='#fff'; ctx.textAlign='center';
+      ctx.font='bold 26px system-ui';
+      ctx.fillText(st==='pause'?'PAUSE':'GAME OVER', VW*0.5, VH*0.40);
     } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.font = '16px system-ui';
-      ctx.textAlign = 'right';
-      ctx.fillText('PLAYING', VW - 8, 22);
+      ctx.fillStyle='rgba(255,255,255,0.85)';
+      ctx.font='16px system-ui'; ctx.textAlign='right';
+      ctx.fillText('PLAYING', VW-8, 22);
+    }
+  } else {
+    // Menús
+    if (st === 'menu') {
+      ctx.fillStyle='#fff'; ctx.font='bold 28px system-ui'; ctx.textAlign='center';
+      ctx.fillText('Break Rush', VW*0.5, VH*0.42);
+      ctx.fillStyle='#9cc2ff'; ctx.font='16px system-ui';
+      ctx.fillText('Evita los meteoritos', VW*0.5, VH*0.48);
+    }
+    if (st === 'settings') {
+      ctx.fillStyle='#fff'; ctx.font='bold 24px system-ui'; ctx.textAlign='center';
+      ctx.fillText('Settings', VW*0.5, VH*0.34);
     }
   }
 
+  // Mensajes motivacionales
   updateMessages(dt);
   drawMessages(ctx);
-  drawUI(ctx);
-  drawDebugHUD(ctx, dt, layout, canvas);
-}
 
-function drawReactiveBackground(ctx: CanvasRenderingContext2D, intensity: number) {
-  const t = Math.max(0, Math.min(1, intensity));
-  const from = { r: 7, g: 26, b: 42 };
-  const to = { r: 32, g: 10, b: 34 };
-  const r = Math.round(from.r + (to.r - from.r) * t);
-  const g = Math.round(from.g + (to.g - from.g) * t);
-  const b = Math.round(from.b + (to.b - from.b) * t);
-  const cx = VW * 0.5;
-  const cy = VH * 0.45;
-  const grd = ctx.createRadialGradient(
-    cx,
-    cy,
-    Math.min(VW, VH) * 0.1,
-    cx,
-    cy,
-    Math.max(VW, VH),
-  );
-  grd.addColorStop(0, `rgb(${r + 10}, ${g + 10}, ${b + 10})`);
-  grd.addColorStop(1, `rgb(${r}, ${g}, ${b})`);
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, VW, VH);
+  // UI (botones)
+  drawUI(ctx);
+
+  drawDebugHUD(ctx, dt, L, canvas);
 }
 
 function shareScoreSmart() {
@@ -436,4 +417,33 @@ function shareScoreSmart() {
     const href = useWhatsapp ? whatsapp : telegram;
     window.open(href, '_blank', 'noreferrer');
   }
+}
+
+function applyFrameFade(ctx: CanvasRenderingContext2D, alpha: number) {
+  // Oscurece todo el frame con un rect semi-transparente para crear estela
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, VW, VH);
+  ctx.restore();
+}
+
+function drawReactiveBackground(ctx: CanvasRenderingContext2D, intensity: number, alpha: number = 1) {
+  const t = Math.max(0, Math.min(1, intensity));
+  const from = { r: 7, g: 26, b: 42 };   // #071a2a
+  const to   = { r: 32, g: 10, b: 34 };  // #200a22
+  const r = Math.round(from.r + (to.r - from.r) * t);
+  const g = Math.round(from.g + (to.g - from.g) * t);
+  const b = Math.round(from.b + (to.b - from.b) * t);
+
+  const cx = VW * 0.5, cy = VH * 0.45;
+  const grd = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.1, cx, cy, Math.max(VW, VH));
+  grd.addColorStop(0, `rgb(${r+10}, ${g+10}, ${b+10})`);
+  grd.addColorStop(1, `rgb(${r}, ${g}, ${b})`);
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, VW, VH);
+  ctx.restore();
 }

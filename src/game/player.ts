@@ -74,21 +74,10 @@ export function drawTrail(ctx: CanvasRenderingContext2D, p: Player) {
   ctx.globalAlpha = 1;
 }
 
-export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player, alpha = 1) {
-  // Capa de desvanecimiento (estela)
-  ctx.globalAlpha = 0.15;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, VW, VH);
-  ctx.globalAlpha = alpha;
-
-  // Bola
+export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player) {
   const g = ctx.createRadialGradient(
-    p.x - p.r * 0.3,
-    p.y - p.r * 0.3,
-    p.r * 0.1,
-    p.x,
-    p.y,
-    p.r,
+    p.x - p.r * 0.3, p.y - p.r * 0.3, p.r * 0.1,
+    p.x,             p.y,             p.r,
   );
   g.addColorStop(0, '#baf5ff');
   g.addColorStop(0.4, '#3fd0e9');
@@ -98,8 +87,6 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player, alpha = 1) 
   ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
   ctx.fill();
 
-  // Brillo exterior
-  ctx.globalAlpha = 1;
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
