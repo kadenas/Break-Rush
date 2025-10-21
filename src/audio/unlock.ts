@@ -1,4 +1,4 @@
-import { unlock } from './audioManager';
+import { unlockSync } from './audioManager';
 
 type StartFn = () => void;
 
@@ -31,7 +31,7 @@ export function installGlobalUnlock(start: StartFn): void {
 
 export async function unlockThenStart(start: StartFn): Promise<void> {
   try {
-    await unlock();
+    unlockSync();
   } catch (error) {
     console.warn('[AUDIO] Unlock failed', error);
   }

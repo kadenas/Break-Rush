@@ -159,12 +159,9 @@ function cleanupHandle(handle: MusicHandle) {
   handle.gain = undefined;
 }
 
-async function warmupContext(ctx: AudioContext): Promise<void> {
-  if (warmupDone) {
+function scheduleWarmup(ctx: AudioContext): void {
+  if (warmupDone || warmupRunning) {
     return;
-  }
-  if (warmupRunning) {
-    return warmupRunning;
   }
   warmupRunning = (async () => {
     try {
@@ -199,11 +196,42 @@ async function warmupContext(ctx: AudioContext): Promise<void> {
       warmupRunning = null;
     }
   })();
-  return warmupRunning;
+}
+
+async function warmupContext(ctx: AudioContext): Promise<void> {
+  if (warmupDone) {
+    return;
+  }
+  scheduleWarmup(ctx);
+  const running = warmupRunning;
+  if (running) {
+    await running;
+  }
+}
+
+export function unlockSync(): void {
+  const ctx = ensureContext() ?? createContext();
+  if (!ctx) {
+    return;
+  }
+  if (ctx.state === 'suspended') {
+    try {
+      const resumeResult = ctx.resume();
+      if (resumeResult && typeof resumeResult.catch === 'function') {
+        resumeResult.catch((error) => {
+          console.warn('[AUDIO] Resume failed', error);
+        });
+      }
+    } catch (error) {
+      console.warn('[AUDIO] Resume threw', error);
+    }
+  }
+  scheduleWarmup(ctx);
 }
 
 export async function unlock(): Promise<AudioContext | null> {
-  const ctx = ensureContext() ?? createContext();
+  unlockSync();
+  const ctx = ensureContext();
   if (!ctx) {
     return null;
   }

@@ -66,11 +66,13 @@ export function playSfx(name: TrackName) {
     return;
   }
   if (name === 'level') {
-    void playClip(AUDIO.LEVEL, { vol: 0.9 }).then((ok) => {
-      if (!ok) {
-        synthPing();
-      }
-    });
+    void playClip(AUDIO.LEVEL, { vol: 0.9 })
+      .then((ok) => {
+        if (!ok) {
+          synthPing();
+        }
+      })
+      .catch(() => {});
   }
 }
 
