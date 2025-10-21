@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: process.env.VITE_BASE ?? '/',
+  base: '/',
+  publicDir: 'public',
   build: {
     target: 'es2020',
   },
