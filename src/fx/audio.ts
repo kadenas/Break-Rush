@@ -1,39 +1,25 @@
-import { AUDIO_NAMES } from '../audio/names.js';
-import {
-  playMusic as playMusicTrack,
-  stopMusic as stopMusicTrack,
-  playSfx as playSfxClip,
-  resume as resumeContext,
-  getContext as getAudioContext,
-} from '../audio/audioManager.js';
-import type { MusicHandle } from '../audio/audioManager.js';
+import { AUDIO } from '../audio/names';
+import * as AudioMgr from '../audio/audioManager';
+import type { MusicHandle } from '../audio/audioManager';
 
-type TrackName = 'whoosh' | 'level';
+type TrackName = 'level';
 
-type AudioState = 'INTRO' | 'PLAYING' | 'GAME_OVER';
-
-const MUSIC_FADE_IN_INTRO = 0.6;
-const MUSIC_FADE_IN_PLAY = 0.4;
-const MUSIC_FADE_OUT = 0.35;
+const MUSIC_FADE_IN_INTRO = 0.5;
+const MUSIC_FADE_IN_PLAY = 0.3;
+const MUSIC_FADE_OUT = 0.25;
 
 let musicEnabled = true;
 let sfxEnabled = true;
-let currentState: AudioState = 'INTRO';
 let currentHandle: MusicHandle | null = null;
-let currentTrack: string | null = null;
 let desiredTrack: string | null = null;
 
 export function audioInit(opts?: { music?: boolean; sfx?: boolean }) {
   musicEnabled = opts?.music ?? musicEnabled;
   sfxEnabled = opts?.sfx ?? sfxEnabled;
-  void resumeContext();
-  desiredTrack = null;
 }
 
 export function unlockAudio() {
-  return resumeContext().then(() => {
-    ensureMusicForState();
-  });
+  return AudioMgr.unlock();
 }
 
 export function setMusic(on: boolean) {
@@ -42,14 +28,9 @@ export function setMusic(on: boolean) {
     stopCurrentMusic(MUSIC_FADE_OUT);
     return;
   }
-  if (!desiredTrack) {
-    if (currentState === 'INTRO') {
-      desiredTrack = AUDIO_NAMES.INTRO;
-    } else if (currentState === 'PLAYING') {
-      desiredTrack = AUDIO_NAMES.PLAY;
-    }
+  if (desiredTrack) {
+    startTrack(desiredTrack, desiredTrack === AUDIO.INTRO ? MUSIC_FADE_IN_INTRO : MUSIC_FADE_IN_PLAY);
   }
-  ensureMusicForState();
 }
 
 export function setSfx(on: boolean) {
@@ -61,34 +42,37 @@ export function stopMusic() {
 }
 
 export function toIntro() {
-  currentState = 'INTRO';
-  desiredTrack = AUDIO_NAMES.INTRO;
-  ensureMusicForState(MUSIC_FADE_IN_INTRO);
-}
-
-export function startGame() {
-  currentState = 'PLAYING';
-  desiredTrack = AUDIO_NAMES.PLAY;
-  ensureMusicForState(MUSIC_FADE_IN_PLAY);
-}
-
-export function onHit() {
-  currentState = 'GAME_OVER';
-  desiredTrack = null;
-  stopCurrentMusic(0.2);
-  if (sfxEnabled) {
-    void playSfxClip(AUDIO_NAMES.HIT, { vol: 0.9 }).then((ok) => {
-      if (!ok) {
-        synthCrash();
-      }
-    });
+  desiredTrack = AUDIO.INTRO;
+  if (musicEnabled) {
+    startTrack(AUDIO.INTRO, MUSIC_FADE_IN_INTRO);
   }
 }
 
+export function startGame() {
+  desiredTrack = AUDIO.PLAY;
+  if (musicEnabled) {
+    startTrack(AUDIO.PLAY, MUSIC_FADE_IN_PLAY);
+  }
+}
+
+export function onHit() {
+  desiredTrack = null;
+  stopCurrentMusic(0.25);
+  if (!sfxEnabled) {
+    return;
+  }
+  void AudioMgr.playSfx(AUDIO.HIT, { vol: 1 }).then((ok) => {
+    if (!ok) {
+      synthCrash();
+    }
+  });
+}
+
 export function onRetry() {
-  currentState = 'PLAYING';
-  desiredTrack = AUDIO_NAMES.PLAY;
-  ensureMusicForState(MUSIC_FADE_IN_PLAY);
+  desiredTrack = AUDIO.PLAY;
+  if (musicEnabled) {
+    startTrack(AUDIO.PLAY, MUSIC_FADE_IN_PLAY);
+  }
 }
 
 export function playSfx(name: TrackName) {
@@ -96,57 +80,36 @@ export function playSfx(name: TrackName) {
     return;
   }
   if (name === 'level') {
-    void playSfxClip(AUDIO_NAMES.LVL, { vol: 0.8 }).then((ok) => {
+    void AudioMgr.playSfx(AUDIO.LEVEL, { vol: 0.9 }).then((ok) => {
       if (!ok) {
         synthPing();
       }
     });
-    return;
   }
-  void playSfxClip(AUDIO_NAMES.HIT, { vol: 0.45 });
-}
-
-function ensureMusicForState(fadeIn?: number) {
-  if (currentState === 'GAME_OVER') {
-    stopCurrentMusic(MUSIC_FADE_OUT);
-    return;
-  }
-  if (!musicEnabled || !desiredTrack) {
-    stopCurrentMusic(MUSIC_FADE_OUT);
-    return;
-  }
-  if (currentTrack === desiredTrack && currentHandle) {
-    return;
-  }
-  const fade = fadeIn ?? (desiredTrack === AUDIO_NAMES.INTRO ? MUSIC_FADE_IN_INTRO : MUSIC_FADE_IN_PLAY);
-  startTrack(desiredTrack, fade);
 }
 
 function startTrack(name: string, fadeIn: number) {
   stopCurrentMusic(MUSIC_FADE_OUT);
-  const handle = playMusicTrack(name, { loop: true, fadeIn });
-  currentHandle = handle;
+  const handle = AudioMgr.playMusic(name, { loop: true, fadeIn });
   if (handle) {
-    currentTrack = name;
+    currentHandle = handle;
   } else {
-    currentTrack = null;
+    currentHandle = null;
   }
 }
 
 function stopCurrentMusic(fadeOut: number) {
   if (currentHandle) {
-    stopMusicTrack(currentHandle, { fadeOut });
+    AudioMgr.stopMusic(currentHandle, { fadeOut });
   }
   currentHandle = null;
-  currentTrack = null;
 }
 
 function getCtx() {
-  const ctx = getAudioContext();
+  const ctx = AudioMgr.getContext();
   if (!ctx) {
     return null;
   }
-  void resumeContext();
   return ctx;
 }
 
