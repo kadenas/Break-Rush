@@ -1,17 +1,21 @@
 import { AUDIO } from '../audio/names';
 import type { MusicHandle } from '../audio/audioManager';
-import { getContext, playMusic, playSfx, stopMusic, unlock } from '../audio/audioManager';
+import { getContext, playMusic, playSfx as playClip, stopMusic as haltMusic, unlock } from '../audio/audioManager';
 
 type TrackName = 'level';
+
+type MusicState = 'idle' | 'intro' | 'play' | 'hit' | 'game_over';
 
 const MUSIC_FADE_IN_INTRO = 0.5;
 const MUSIC_FADE_IN_PLAY = 0.3;
 const MUSIC_FADE_OUT = 0.25;
+const MUSIC_FADE_OUT_HIT = 0.1;
 
 let musicEnabled = true;
 let sfxEnabled = true;
 let currentHandle: MusicHandle | null = null;
-let desiredTrack: string | null = null;
+let desiredState: MusicState = 'idle';
+let activeState: MusicState = 'idle';
 
 export function audioInit(opts?: { music?: boolean; sfx?: boolean }) {
   musicEnabled = opts?.music ?? musicEnabled;
@@ -28,9 +32,7 @@ export function setMusic(on: boolean) {
     stopCurrentMusic(MUSIC_FADE_OUT);
     return;
   }
-  if (desiredTrack) {
-    startTrack(desiredTrack, desiredTrack === AUDIO.INTRO ? MUSIC_FADE_IN_INTRO : MUSIC_FADE_IN_PLAY);
-  }
+  applyMusicState(desiredState);
 }
 
 export function setSfx(on: boolean) {
@@ -38,41 +40,25 @@ export function setSfx(on: boolean) {
 }
 
 export function stopMusic() {
+  desiredState = 'idle';
+  activeState = 'idle';
   stopCurrentMusic(MUSIC_FADE_OUT);
 }
 
 export function toIntro() {
-  desiredTrack = AUDIO.INTRO;
-  if (musicEnabled) {
-    startTrack(AUDIO.INTRO, MUSIC_FADE_IN_INTRO);
-  }
+  transitionMusic('intro');
 }
 
 export function startGame() {
-  desiredTrack = AUDIO.PLAY;
-  if (musicEnabled) {
-    startTrack(AUDIO.PLAY, MUSIC_FADE_IN_PLAY);
-  }
+  transitionMusic('play');
 }
 
 export function onHit() {
-  desiredTrack = null;
-  stopCurrentMusic(0.25);
-  if (!sfxEnabled) {
-    return;
-  }
-  void playSfx(AUDIO.HIT, { vol: 1 }).then((ok) => {
-    if (!ok) {
-      synthCrash();
-    }
-  });
+  transitionMusic('hit');
 }
 
 export function onRetry() {
-  desiredTrack = AUDIO.PLAY;
-  if (musicEnabled) {
-    startTrack(AUDIO.PLAY, MUSIC_FADE_IN_PLAY);
-  }
+  transitionMusic('play');
 }
 
 export function playSfx(name: TrackName) {
@@ -80,7 +66,7 @@ export function playSfx(name: TrackName) {
     return;
   }
   if (name === 'level') {
-    void playSfx(AUDIO.LEVEL, { vol: 0.9 }).then((ok) => {
+    void playClip(AUDIO.LEVEL, { vol: 0.9 }).then((ok) => {
       if (!ok) {
         synthPing();
       }
@@ -88,19 +74,98 @@ export function playSfx(name: TrackName) {
   }
 }
 
-function startTrack(name: string, fadeIn: number) {
-  stopCurrentMusic(MUSIC_FADE_OUT);
-  const handle = playMusic(name, { loop: true, fadeIn });
+function transitionMusic(next: MusicState) {
+  if (desiredState === next && (!musicEnabled || (activeState === next && currentHandle))) {
+    return;
+  }
+  desiredState = next;
+  if (!musicEnabled) {
+    if (next === 'idle' || next === 'game_over') {
+      stopCurrentMusic(MUSIC_FADE_OUT);
+      activeState = next;
+    } else {
+      activeState = next;
+    }
+    return;
+  }
+  applyMusicState(next);
+}
+
+function applyMusicState(next: MusicState) {
+  switch (next) {
+    case 'idle':
+      activeState = 'idle';
+      stopCurrentMusic(MUSIC_FADE_OUT);
+      break;
+    case 'intro':
+      if (activeState === 'intro' && currentHandle) {
+        break;
+      }
+      activeState = 'intro';
+      startTrack(AUDIO.INTRO, MUSIC_FADE_IN_INTRO, true, MUSIC_FADE_OUT);
+      break;
+    case 'play':
+      activeState = 'play';
+      startTrack(AUDIO.PLAY, MUSIC_FADE_IN_PLAY, true, MUSIC_FADE_OUT);
+      break;
+    case 'hit':
+      activeState = 'hit';
+      stopCurrentMusic(MUSIC_FADE_OUT_HIT);
+      startHitTrack();
+      break;
+    case 'game_over':
+      activeState = 'game_over';
+      stopCurrentMusic(MUSIC_FADE_OUT);
+      break;
+  }
+}
+
+function startTrack(name: string, fadeIn: number, loop: boolean, fadeOutBefore: number) {
+  stopCurrentMusic(fadeOutBefore);
+  const handle = playMusic(name, { loop, fadeIn });
   if (handle) {
     currentHandle = handle;
+    handle.ready.then(() => {
+      if (!handle.source && currentHandle === handle) {
+        currentHandle = null;
+      }
+    });
   } else {
     currentHandle = null;
   }
 }
 
+function startHitTrack() {
+  const handle = playMusic(AUDIO.HIT, { loop: false, fadeIn: 0 });
+  if (!handle) {
+    if (sfxEnabled) {
+      synthCrash();
+    }
+    activeState = 'game_over';
+    desiredState = 'game_over';
+    return;
+  }
+  currentHandle = handle;
+  handle.ready.then(() => {
+    if (!handle.source && desiredState === 'hit') {
+      currentHandle = null;
+      if (sfxEnabled) {
+        synthCrash();
+      }
+      transitionMusic('game_over');
+    }
+  });
+  handle.ended.then(() => {
+    if (desiredState === 'hit') {
+      currentHandle = null;
+      transitionMusic('game_over');
+    }
+  });
+}
+
 function stopCurrentMusic(fadeOut: number) {
   if (currentHandle) {
-    stopMusic(currentHandle, { fadeOut });
+    haltMusic(currentHandle, { fadeOut });
   }
   currentHandle = null;
 }
