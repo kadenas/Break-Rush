@@ -1,6 +1,6 @@
 import { VW, VH } from '../engine/viewport';
 
-export interface Obstacle {
+export interface Ob {
   x: number;
   y: number;
   r: number;
@@ -13,8 +13,8 @@ export interface Obstacle {
   big: boolean;
 }
 
-export interface ObstacleSystem {
-  pool: Obstacle[];
+export interface ObSystem {
+  pool: Ob[];
   active: number[];
   tSpawn: number;
   spawnEvery: number;
@@ -26,9 +26,7 @@ export interface ObstacleSystem {
   waveIntensity: number;
 }
 
-const POOL_SIZE = 64;
-
-export function createObSystem(): ObstacleSystem {
+export function createObSystem(): ObSystem {
   const best = Number(localStorage.getItem('br_best') || '0') || 0;
   return {
     pool: Array.from({ length: POOL_SIZE }, () => ({
@@ -55,10 +53,21 @@ export function createObSystem(): ObstacleSystem {
   };
 }
 
-export function resetObstacles(sys: ObstacleSystem) {
-  for (const index of sys.active) {
-    sys.pool[index].alive = false;
+function alloc(sys: ObSystem): Ob | null {
+  for (let i = 0; i < sys.pool.length; i++) {
+    const o = sys.pool[i];
+    if (!o.alive) {
+      sys.active.push(i);
+      o.alive = true;
+      o.scored = false;
+      return o;
+    }
   }
+  return null;
+}
+
+export function resetObstacles(sys: ObSystem) {
+  for (const i of sys.active) sys.pool[i].alive = false;
   sys.active.length = 0;
   sys.tSpawn = 0;
   sys.spawnEvery = 0.9;
@@ -179,13 +188,13 @@ function spawn(sys: ObstacleSystem) {
   sys.kicked = true;
 }
 
-export function ensureKickstart(sys: ObstacleSystem) {
+export function ensureKickstart(sys: ObSystem) {
   if (!sys.kicked && sys.elapsed > 0.4) {
     spawn(sys);
   }
 }
 
-export function updateObstacles(sys: ObstacleSystem, dt: number) {
+export function updateObstacles(sys: ObSystem, dt: number) {
   sys.elapsed += dt;
   sys.tSpawn += dt;
   sys.waveTimer += dt;
@@ -202,13 +211,14 @@ export function updateObstacles(sys: ObstacleSystem, dt: number) {
     spawn(sys);
   }
 
-  for (let idx = sys.active.length - 1; idx >= 0; idx--) {
-    const poolIndex = sys.active[idx];
-    const ob = sys.pool[poolIndex];
-    if (!ob.alive) {
-      sys.active.splice(idx, 1);
+  for (let a = sys.active.length - 1; a >= 0; a--) {
+    const i = sys.active[a];
+    const o = sys.pool[i];
+    if (!o.alive) {
+      sys.active.splice(a, 1);
       continue;
     }
+    o.y += o.vy * dt;
 
     ob.y += ob.vy * dt;
 
@@ -216,70 +226,72 @@ export function updateObstacles(sys: ObstacleSystem, dt: number) {
       sys.score += ob.scoreValue;
       ob.scored = true;
     }
-
-    if (ob.y - ob.r > VH + 48) {
-      ob.alive = false;
-      sys.active.splice(idx, 1);
+    if (o.y - o.r > VH + 40) {
+      o.alive = false;
+      sys.active.splice(a, 1);
     }
   }
 
   sys.score += dt * 5;
 }
 
-export function drawObstacles(ctx: CanvasRenderingContext2D, sys: ObstacleSystem) {
-  for (const index of sys.active) {
-    const ob = sys.pool[index];
-    if (!ob.alive) continue;
-
-    ctx.save();
-    ctx.globalAlpha = 0.2;
-    ctx.beginPath();
-    ctx.arc(ob.x, ob.y + ob.r * 0.4, ob.r * 1.3, 0, Math.PI * 2);
-    ctx.fillStyle = '#041521';
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    const gradient = ctx.createRadialGradient(
-      ob.x - ob.r * 0.35,
-      ob.y - ob.r * 0.35,
-      ob.r * 0.25,
-      ob.x,
-      ob.y,
-      ob.r,
-    );
-    gradient.addColorStop(0, '#b8f7ff');
-    gradient.addColorStop(0.45, '#54d0e0');
-    gradient.addColorStop(1, '#1aa2b4');
-
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(ob.x, ob.y, ob.r, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(ob.x, ob.y, ob.r - 0.8, -Math.PI * 0.25, Math.PI * 0.25);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
-export function collideCircle(px: number, py: number, pr: number, ob: Obstacle) {
-  const dx = ob.x - px;
-  const dy = ob.y - py;
-  const rr = pr + ob.r;
+export function collideCircle(px: number, py: number, pr: number, o: Ob): boolean {
+  const dx = o.x - px;
+  const dy = o.y - py;
+  const rr = o.r + pr;
   return dx * dx + dy * dy <= rr * rr;
 }
 
-export function commitBest(sys: ObstacleSystem) {
-  const score = Math.floor(sys.score);
-  if (score > sys.best) {
-    sys.best = score;
+export function drawObstacles(ctx: CanvasRenderingContext2D, sys: ObSystem) {
+  for (const i of sys.active) {
+    const o = sys.pool[i];
+    // shadow
+    ctx.globalAlpha = 0.22;
+    ctx.beginPath();
+    ctx.arc(o.x, o.y + o.r * 0.35, o.r * 1.25, 0, Math.PI * 2);
+    ctx.fillStyle = '#041a28';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // body gradient
+    const g = ctx.createRadialGradient(
+      o.x - o.r * 0.35,
+      o.y - o.r * 0.35,
+      o.r * 0.1,
+      o.x,
+      o.y,
+      o.r,
+    );
+    g.addColorStop(0.0, '#b8f7ff');
+    g.addColorStop(0.45, '#54d0e0');
+    g.addColorStop(1.0, '#1aa2b4');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+    ctx.fill();
+    // rim
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, o.r - 0.7, -Math.PI * 0.2, Math.PI * 0.2);
+    ctx.stroke();
+  }
+}
+
+export function commitBest(sys: ObSystem) {
+  if (sys.score > sys.best) {
+    sys.best = Math.floor(sys.score);
     localStorage.setItem('br_best', String(sys.best));
   }
 }
 
-export function getActiveCount(sys: ObstacleSystem) {
+export function getActiveCount(sys: ObSystem) {
   return sys.active.length;
+}
+
+export function getScore(sys: ObSystem) {
+  return Math.floor(sys.score);
+}
+
+export function getBest(sys: ObSystem) {
+  return sys.best;
 }
