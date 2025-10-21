@@ -1,92 +1,152 @@
-import { AudioManager, type PlayHandle } from '../audioManager';
+import { AUDIO_NAMES } from '../audio/names.js';
+import {
+  playMusic as playMusicTrack,
+  stopMusic as stopMusicTrack,
+  playSfx as playSfxClip,
+  resume as resumeContext,
+  getContext as getAudioContext,
+} from '../audio/audioManager.js';
+import type { MusicHandle } from '../audio/audioManager.js';
 
-type TrackName = 'whoosh' | 'level' | 'crash';
+type TrackName = 'whoosh' | 'level';
+
+type AudioState = 'INTRO' | 'PLAYING' | 'GAME_OVER';
+
+const MUSIC_FADE_IN_INTRO = 0.6;
+const MUSIC_FADE_IN_PLAY = 0.4;
+const MUSIC_FADE_OUT = 0.35;
 
 let musicEnabled = true;
 let sfxEnabled = true;
-let musicSource: PlayHandle | null = null;
+let currentState: AudioState = 'INTRO';
+let currentHandle: MusicHandle | null = null;
+let currentTrack: string | null = null;
+let desiredTrack: string | null = null;
 
 export function audioInit(opts?: { music?: boolean; sfx?: boolean }) {
-  musicEnabled = opts?.music ?? (localStorage.getItem('br_music') !== '0');
-  sfxEnabled = opts?.sfx ?? (localStorage.getItem('br_fx') !== '0');
-
-  AudioManager.getContext();
+  musicEnabled = opts?.music ?? musicEnabled;
+  sfxEnabled = opts?.sfx ?? sfxEnabled;
+  void resumeContext();
+  desiredTrack = null;
 }
 
-export async function unlockAudio() {
-  try {
-    await AudioManager.unlock();
-  } catch {
-    // ignore unlock errors caused by autoplay restrictions
-  }
+export function unlockAudio() {
+  return resumeContext().then(() => {
+    ensureMusicForState();
+  });
 }
 
 export function setMusic(on: boolean) {
   musicEnabled = on;
-  localStorage.setItem('br_music', on ? '1' : '0');
-  if (!on) stopMusic();
+  if (!on) {
+    stopCurrentMusic(MUSIC_FADE_OUT);
+    return;
+  }
+  if (!desiredTrack) {
+    if (currentState === 'INTRO') {
+      desiredTrack = AUDIO_NAMES.INTRO;
+    } else if (currentState === 'PLAYING') {
+      desiredTrack = AUDIO_NAMES.PLAY;
+    }
+  }
+  ensureMusicForState();
 }
 
 export function setSfx(on: boolean) {
   sfxEnabled = on;
-  localStorage.setItem('br_fx', on ? '1' : '0');
-}
-
-export async function startMusic() {
-  if (!musicEnabled) return;
-
-  stopMusic();
-  musicSource = (await AudioManager.play('loop', { loop: true, vol: 0.35 })) ?? null;
 }
 
 export function stopMusic() {
-  if (!musicSource) return;
-  if ('stop' in musicSource) {
-    try {
-      musicSource.stop();
-    } catch {
-      // ignore stop errors
-    }
-    try {
-      musicSource.disconnect();
-    } catch {
-      // ignore disconnect errors
-    }
-  } else {
-    musicSource.pause();
-    musicSource.currentTime = 0;
-  }
-  musicSource = null;
+  stopCurrentMusic(MUSIC_FADE_OUT);
 }
 
-export function playBrand() {
-  void AudioManager.play('loop4', { vol: 0.5 });
+export function toIntro() {
+  currentState = 'INTRO';
+  desiredTrack = AUDIO_NAMES.INTRO;
+  ensureMusicForState(MUSIC_FADE_IN_INTRO);
+}
+
+export function startGame() {
+  currentState = 'PLAYING';
+  desiredTrack = AUDIO_NAMES.PLAY;
+  ensureMusicForState(MUSIC_FADE_IN_PLAY);
+}
+
+export function onHit() {
+  currentState = 'GAME_OVER';
+  desiredTrack = null;
+  stopCurrentMusic(0.2);
+  if (sfxEnabled) {
+    void playSfxClip(AUDIO_NAMES.HIT, { vol: 0.9 }).then((ok) => {
+      if (!ok) {
+        synthCrash();
+      }
+    });
+  }
+}
+
+export function onRetry() {
+  currentState = 'PLAYING';
+  desiredTrack = AUDIO_NAMES.PLAY;
+  ensureMusicForState(MUSIC_FADE_IN_PLAY);
 }
 
 export function playSfx(name: TrackName) {
-  if (!sfxEnabled) return;
-
-  if (name === 'crash') {
-    void AudioManager.play('loop3', { vol: 0.8 }).then((src) => {
-      if (!src) synthCrash();
-    });
+  if (!sfxEnabled) {
     return;
   }
-
   if (name === 'level') {
-    void AudioManager.play('level', { vol: 0.8 }).then((src) => {
-      if (!src) synthPing();
+    void playSfxClip(AUDIO_NAMES.LVL, { vol: 0.8 }).then((ok) => {
+      if (!ok) {
+        synthPing();
+      }
     });
     return;
   }
+  void playSfxClip(AUDIO_NAMES.HIT, { vol: 0.45 });
+}
 
-  void AudioManager.play('whoosh', { vol: 0.6 });
+function ensureMusicForState(fadeIn?: number) {
+  if (currentState === 'GAME_OVER') {
+    stopCurrentMusic(MUSIC_FADE_OUT);
+    return;
+  }
+  if (!musicEnabled || !desiredTrack) {
+    stopCurrentMusic(MUSIC_FADE_OUT);
+    return;
+  }
+  if (currentTrack === desiredTrack && currentHandle) {
+    return;
+  }
+  const fade = fadeIn ?? (desiredTrack === AUDIO_NAMES.INTRO ? MUSIC_FADE_IN_INTRO : MUSIC_FADE_IN_PLAY);
+  startTrack(desiredTrack, fade);
+}
+
+function startTrack(name: string, fadeIn: number) {
+  stopCurrentMusic(MUSIC_FADE_OUT);
+  const handle = playMusicTrack(name, { loop: true, fadeIn });
+  currentHandle = handle;
+  if (handle) {
+    currentTrack = name;
+  } else {
+    currentTrack = null;
+  }
+}
+
+function stopCurrentMusic(fadeOut: number) {
+  if (currentHandle) {
+    stopMusicTrack(currentHandle, { fadeOut });
+  }
+  currentHandle = null;
+  currentTrack = null;
 }
 
 function getCtx() {
-  const ctx = AudioManager.getContext();
-  if (!ctx) return null;
-  void AudioManager.unlock();
+  const ctx = getAudioContext();
+  if (!ctx) {
+    return null;
+  }
+  void resumeContext();
   return ctx;
 }
 

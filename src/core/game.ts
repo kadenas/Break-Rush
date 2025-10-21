@@ -17,7 +17,18 @@ import {
 import { getClick } from '../engine/input';
 import { drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
 import { updateMessages, drawMessages, resetMessages, maybeSpawnAuto, spawnMilestoneMessage } from '../fx/messages';
-import { audioInit, startMusic, stopMusic, setMusic, setSfx, playSfx, unlockAudio, playBrand } from '../fx/audio';
+import {
+  audioInit,
+  stopMusic,
+  setMusic,
+  setSfx,
+  playSfx,
+  unlockAudio,
+  toIntro as audioToIntro,
+  startGame as audioStartGame,
+  onHit as audioOnHit,
+  onRetry as audioOnRetry,
+} from '../fx/audio';
 
 let running = false;
 let raf = 0;
@@ -72,6 +83,7 @@ function resetRun() {
 }
 
 const goPlay = () => {
+  const prevState = getState();
   resetRun();
   resetMessages();
   flashes = [];
@@ -79,7 +91,13 @@ const goPlay = () => {
   levelBannerT = 0;
   levelShown = 1;
   nextMilestone = 100;
-  if (settings.music) startMusic();
+  if (settings.music) {
+    if (prevState === 'gameover') {
+      audioOnRetry();
+    } else {
+      audioStartGame();
+    }
+  }
   setState('playing');
 };
 
@@ -99,7 +117,7 @@ export function bootGame(c: HTMLCanvasElement) {
     if (gateFired) return;
     gateFired = true;
     try { await unlockAudio(); } catch {}
-    playBrand();
+    audioToIntro();
     setState('menu');
     gate?.remove();
   };
@@ -162,7 +180,7 @@ export function bootGame(c: HTMLCanvasElement) {
     visible: () => getState() === 'pause',
     onClick: () => {
       if (settings.music) {
-        void startMusic();
+        audioStartGame();
       }
       setState('playing');
     },
@@ -199,6 +217,7 @@ export function bootGame(c: HTMLCanvasElement) {
       stopMusic();
       resetMessages();
       setState('menu');
+      audioToIntro();
     },
   });
 
@@ -235,6 +254,7 @@ export function bootGame(c: HTMLCanvasElement) {
       stopMusic();
       resetMessages();
       setState('menu');
+      audioToIntro();
     },
   });
 
@@ -289,13 +309,6 @@ export function bootGame(c: HTMLCanvasElement) {
     onClick: () => {
       settings.music = !settings.music;
       saveSettings();
-      if (settings.music) {
-        if (getState() === 'playing') {
-          void startMusic();
-        }
-      } else {
-        stopMusic();
-      }
     },
   });
   registerButton({
@@ -306,7 +319,10 @@ export function bootGame(c: HTMLCanvasElement) {
     h: 40,
     label: 'Back',
     visible: () => getState() === 'settings',
-    onClick: () => setState('menu'),
+    onClick: () => {
+      setState('menu');
+      audioToIntro();
+    },
   });
 }
 
@@ -366,7 +382,7 @@ function loop(now: number) {
       const o = obs.pool[idx];
       if (!o.alive) continue;
       if (collideCircle(player.x, player.y, player.r, o)) {
-        playSfx('crash');
+        audioOnHit();
         commitBest(obs);
         if (settings.vibe && 'vibrate' in navigator) {
           try {
@@ -378,7 +394,6 @@ function loop(now: number) {
         const earned = Math.floor(sc / 50);
         totalRank += earned;
         localStorage.setItem('br_rank', String(totalRank));
-        stopMusic();
         setState('gameover');
         break;
       }

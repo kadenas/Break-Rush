@@ -8,7 +8,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const sourceDir = path.resolve(projectRoot, '../breakrush_assets/audio');
 const destinationDir = path.resolve(projectRoot, 'public/audio');
 
-const AUDIO_EXTENSIONS = new Set(['.mp3', '.ogg']);
+const AUDIO_EXTENSIONS = new Set(['.mp3']);
 
 async function exists(dir) {
   try {
