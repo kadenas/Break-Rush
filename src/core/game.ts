@@ -15,7 +15,8 @@ import {
   getBest,
 } from '../game/obstacles';
 import { getClick } from '../engine/input';
-import { UIButton, drawUI, registerButton, hitUI, clearButtons, updateSettingsSnapshot } from '../ui/ui';
+import { UIButton, drawUI, registerButton, hitUI } from '../ui/ui';
+import { clearButtons, updateSettingsSnapshot } from '../ui/ui';
 
 let running = false;
 let raf = 0;
