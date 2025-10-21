@@ -15,14 +15,8 @@ import {
   getBest,
 } from '../game/obstacles';
 import { getClick } from '../engine/input';
-import {
-  UIButton,
-  drawUI,
-  registerButton,
-  clearButtons,
-  hitUI,
-  updateSettingsSnapshot,
-} from '../ui/ui';
+import { UIButton, drawUI, registerButton, hitUI } from '../ui/ui';
+import { clearButtons, updateSettingsSnapshot } from '../ui/ui';
 
 let running = false;
 let raf = 0;
@@ -250,7 +244,9 @@ function loop(now: number) {
   last = now;
 
   const click = getClick();
-  if (click) hitUI(click.x, click.y);
+  if (click) {
+    hitUI(click.x, click.y);
+  }
 
   const st = getState();
   if (st === 'playing') {
