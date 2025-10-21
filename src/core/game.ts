@@ -1,5 +1,5 @@
 import { getState, setState } from './state';
-import { createPlayer, updatePlayer, drawPlayer } from '../game/player';
+import { createPlayer, updatePlayer, drawPlayer, drawTrail, resetPlayerTrail } from '../game/player';
 import { applyRenderTransform, computeLayout, VW, VH } from '../engine/viewport';
 import { initDebug, drawDebugHUD, toggleDebug } from '../engine/debug';
 import {
@@ -25,10 +25,21 @@ let debugHotkeyBound = false;
 const player = createPlayer();
 const obstacles = createObSystem();
 
+const INVULN_DURATION = 0.8;
+const INVULN_BLINK_INTERVAL = 0.09;
+const CAMERA_SHAKE_DURATION = 0.35;
+const CAMERA_SHAKE_AMPLITUDE = 6;
+
+let invulnTimer = 0;
+let cameraShakeTimer = 0;
+
 function resetRun() {
   player.x = VW / 2;
   player.y = VH * 0.8;
+  resetPlayerTrail(player);
   resetObstacles(obstacles);
+  invulnTimer = INVULN_DURATION;
+  cameraShakeTimer = 0;
 }
 
 function registerButtons() {
@@ -168,6 +179,7 @@ function loop(now: number) {
 
   const state = getState();
   if (state === 'playing') {
+    if (invulnTimer > 0) invulnTimer = Math.max(0, invulnTimer - dt);
     updatePlayer(player, dt);
     ensureKickstart(obstacles);
     updateObstacles(obstacles, dt);
@@ -175,9 +187,11 @@ function loop(now: number) {
     for (const index of obstacles.active) {
       const obstacle = obstacles.pool[index];
       if (!obstacle.alive) continue;
-      if (collideCircle(player.x, player.y, player.r, obstacle)) {
+      if (invulnTimer <= 0 && collideCircle(player.x, player.y, player.r, obstacle)) {
         commitBest(obstacles);
         setState('gameover');
+        invulnTimer = 0;
+        cameraShakeTimer = CAMERA_SHAKE_DURATION;
         break;
       }
     }
@@ -199,7 +213,19 @@ function render(dt: number) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  let shakeX = 0;
+  let shakeY = 0;
+  if (cameraShakeTimer > 0) {
+    const t = cameraShakeTimer / CAMERA_SHAKE_DURATION;
+    const amplitude = CAMERA_SHAKE_AMPLITUDE * t;
+    const angle = Math.random() * Math.PI * 2;
+    shakeX = Math.cos(angle) * amplitude;
+    shakeY = Math.sin(angle) * amplitude;
+    cameraShakeTimer = Math.max(0, cameraShakeTimer - dt);
+  }
+
   applyRenderTransform(ctx, layout);
+  if (shakeX || shakeY) ctx.translate(shakeX / layout.scale, shakeY / layout.scale);
   ctx.fillStyle = '#0b1f33';
   ctx.fillRect(0, 0, VW, VH);
 
@@ -218,7 +244,12 @@ function render(dt: number) {
     ctx.fillText('Evita los meteoritos', VW * 0.5, VH * 0.62);
   } else {
     drawObstacles(ctx, obstacles);
-    drawPlayer(ctx, player);
+    drawTrail(ctx, player);
+
+    const blinkElapsed = Math.max(0, INVULN_DURATION - invulnTimer);
+    const blinkToggle = Math.floor(blinkElapsed / INVULN_BLINK_INTERVAL) % 2 === 0;
+    const playerAlpha = invulnTimer > 0 ? (blinkToggle ? 1 : 0.35) : 1;
+    drawPlayer(ctx, player, playerAlpha);
 
     const score = Math.floor(obstacles.score);
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
