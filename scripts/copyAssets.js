@@ -1,4 +1,5 @@
-import { mkdir, readdir, copyFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readdir, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,23 +11,10 @@ const destinationDir = path.resolve(projectRoot, 'public/audio');
 
 const AUDIO_EXTENSIONS = new Set(['.mp3']);
 
-async function exists(dir) {
-  try {
-    const stats = await stat(dir);
-    return stats.isDirectory();
-  } catch (error) {
-    if (error && error.code === 'ENOENT') {
-      return false;
-    }
-    throw error;
-  }
-}
-
 async function copyAssets() {
-  const hasSource = await exists(sourceDir);
-  if (!hasSource) {
-    console.warn('[AUDIO] Source directory not found:', sourceDir);
-    return;
+  if (!existsSync(sourceDir)) {
+    console.warn(`[AUDIO] Source directory not found: ${sourceDir} (skipped)`);
+    process.exit(0);
   }
 
   await mkdir(destinationDir, { recursive: true });

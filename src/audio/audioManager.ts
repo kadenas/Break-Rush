@@ -362,3 +362,11 @@ export function setMaster(value: number): void {
 export function getContext(): AudioContext | null {
   return context;
 }
+
+export const AudioMgr = {
+  unlock,
+  getContext,
+  playMusic,
+  playSfx,
+  stopMusic,
+};
