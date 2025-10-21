@@ -14,7 +14,7 @@ import {
   getBest,
 } from '../game/obstacles';
 import { getClick } from '../engine/input';
-import { UIButton, drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
+import { drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
 
 let running = false;
 let raf = 0;
@@ -51,165 +51,170 @@ export function bootGame(c: HTMLCanvasElement) {
   running = false;
 
   clearButtons();
+  // constantes de layout UI
+  const BTN_W = 160;
+  const BTN_H = 44;
+  const GAP = 14;
   const centerX = VW * 0.5;
   const centerY = VH * 0.55;
-  const pad = 8;
 
-  const buttons: UIButton[] = [
-    {
-      id: 'start',
-      x: centerX - 70,
-      y: centerY - 24,
-      w: 140,
-      h: 48,
-      label: 'Start',
-      visible: () => getState() === 'menu',
-      onClick: () => {
-        resetRun();
-        setState('playing');
-      },
+  // MENU principal
+  registerButton({
+    id: 'start',
+    x: centerX - BTN_W / 2,
+    y: centerY - BTN_H - GAP,
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Start',
+    visible: () => getState() === 'menu',
+    onClick: () => {
+      resetRun();
+      setState('playing');
     },
-    {
-      id: 'settings',
-      x: centerX - 70,
-      y: centerY + 36,
-      w: 140,
-      h: 44,
-      label: 'Settings',
-      visible: () => getState() === 'menu',
-      onClick: () => setState('settings'),
-    },
-    {
-      id: 'pause',
-      x: VW - 48 - pad,
-      y: pad,
-      w: 48,
-      h: 32,
-      label: 'II',
-      visible: () => getState() === 'playing',
-      onClick: () => setState('pause'),
-    },
-    {
-      id: 'resume',
-      x: centerX - 70,
-      y: centerY - 68,
-      w: 140,
-      h: 44,
-      label: 'Resume',
-      visible: () => getState() === 'pause',
-      onClick: () => setState('playing'),
-    },
-    {
-      id: 'restart',
-      x: centerX - 70,
-      y: centerY - 16,
-      w: 140,
-      h: 44,
-      label: 'Restart',
-      visible: () => getState() === 'pause',
-      onClick: () => {
-        resetRun();
-        setState('playing');
-      },
-    },
-    {
-      id: 'menu',
-      x: centerX - 70,
-      y: centerY + 36,
-      w: 140,
-      h: 44,
-      label: 'Menu',
-      visible: () => {
-        const st = getState();
-        return st === 'pause' || st === 'gameover';
-      },
-      onClick: () => setState('menu'),
-    },
-    {
-      id: 'retry',
-      x: centerX - 70,
-      y: centerY - 10,
-      w: 140,
-      h: 44,
-      label: 'Retry',
-      visible: () => getState() === 'gameover',
-      onClick: () => {
-        resetRun();
-        setState('playing');
-      },
-    },
-    {
-      id: 'share',
-      x: centerX - 70,
-      y: centerY + 40,
-      w: 140,
-      h: 44,
-      label: 'Share',
-      visible: () => getState() === 'gameover',
-      onClick: () => shareScoreSmart(),
-    },
-    {
-      id: 'gomenu',
-      x: centerX - 70,
-      y: centerY + 90,
-      w: 140,
-      h: 44,
-      label: 'Menu',
-      visible: () => getState() === 'gameover',
-      onClick: () => setState('menu'),
-    },
-    {
-      id: 'tog-vibe',
-      x: centerX - 90,
-      y: centerY - 70,
-      w: 180,
-      h: 40,
-      label: () => `Vibration: ${settings.vibe ? 'ON' : 'OFF'}`,
-      visible: () => getState() === 'settings',
-      onClick: () => {
-        settings.vibe = !settings.vibe;
-        saveSettings();
-      },
-    },
-    {
-      id: 'tog-fx',
-      x: centerX - 90,
-      y: centerY - 20,
-      w: 180,
-      h: 40,
-      label: () => `FX: ${settings.fx ? 'ON' : 'OFF'}`,
-      visible: () => getState() === 'settings',
-      onClick: () => {
-        settings.fx = !settings.fx;
-        saveSettings();
-      },
-    },
-    {
-      id: 'tog-low',
-      x: centerX - 90,
-      y: centerY + 30,
-      w: 180,
-      h: 40,
-      label: () => `Low Power: ${settings.low ? 'ON' : 'OFF'}`,
-      visible: () => getState() === 'settings',
-      onClick: () => {
-        settings.low = !settings.low;
-        saveSettings();
-      },
-    },
-    {
-      id: 'back',
-      x: centerX - 70,
-      y: centerY + 90,
-      w: 140,
-      h: 40,
-      label: 'Back',
-      visible: () => getState() === 'settings',
-      onClick: () => setState('menu'),
-    },
-  ];
+  });
+  registerButton({
+    id: 'settings',
+    x: centerX - BTN_W / 2,
+    y: centerY,
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Settings',
+    visible: () => getState() === 'menu',
+    onClick: () => setState('settings'),
+  });
 
-  buttons.forEach(registerButton);
+  // PLAYING: Pause arriba-dcha, lejos del score
+  registerButton({
+    id: 'pause',
+    x: VW - 48 - 8,
+    y: 8,
+    w: 48,
+    h: 32,
+    label: 'II',
+    visible: () => getState() === 'playing',
+    onClick: () => setState('pause'),
+  });
+
+  // PAUSE
+  registerButton({
+    id: 'resume',
+    x: centerX - BTN_W / 2,
+    y: centerY - (BTN_H + GAP),
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Resume',
+    visible: () => getState() === 'pause',
+    onClick: () => setState('playing'),
+  });
+  registerButton({
+    id: 'restart',
+    x: centerX - BTN_W / 2,
+    y: centerY,
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Restart',
+    visible: () => getState() === 'pause',
+    onClick: () => {
+      resetRun();
+      setState('playing');
+    },
+  });
+  registerButton({
+    id: 'menu',
+    x: centerX - BTN_W / 2,
+    y: centerY + (BTN_H + GAP),
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Menu',
+    visible: () => getState() === 'pause',
+    onClick: () => setState('menu'),
+  });
+
+  // GAME OVER: Retry, Share, Menu (solo UNO)
+  registerButton({
+    id: 'retry',
+    x: centerX - BTN_W / 2,
+    y: centerY - (BTN_H + GAP),
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Retry',
+    visible: () => getState() === 'gameover',
+    onClick: () => {
+      resetRun();
+      setState('playing');
+    },
+  });
+  registerButton({
+    id: 'share',
+    x: centerX - BTN_W / 2,
+    y: centerY,
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Share',
+    visible: () => getState() === 'gameover',
+    onClick: () => shareScoreSmart(),
+  });
+  registerButton({
+    id: 'menu-go',
+    x: centerX - BTN_W / 2,
+    y: centerY + (BTN_H + GAP),
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Menu',
+    visible: () => getState() === 'gameover',
+    onClick: () => setState('menu'),
+  });
+
+  // SETTINGS
+  registerButton({
+    id: 'tog-vibe',
+    x: centerX - 90,
+    y: centerY - 70,
+    w: 180,
+    h: 40,
+    label: () => `Vibration: ${settings.vibe ? 'ON' : 'OFF'}`,
+    visible: () => getState() === 'settings',
+    onClick: () => {
+      settings.vibe = !settings.vibe;
+      saveSettings();
+    },
+  });
+  registerButton({
+    id: 'tog-fx',
+    x: centerX - 90,
+    y: centerY - 20,
+    w: 180,
+    h: 40,
+    label: () => `FX: ${settings.fx ? 'ON' : 'OFF'}`,
+    visible: () => getState() === 'settings',
+    onClick: () => {
+      settings.fx = !settings.fx;
+      saveSettings();
+    },
+  });
+  registerButton({
+    id: 'tog-low',
+    x: centerX - 90,
+    y: centerY + 30,
+    w: 180,
+    h: 40,
+    label: () => `Low Power: ${settings.low ? 'ON' : 'OFF'}`,
+    visible: () => getState() === 'settings',
+    onClick: () => {
+      settings.low = !settings.low;
+      saveSettings();
+    },
+  });
+  registerButton({
+    id: 'back',
+    x: centerX - 70,
+    y: centerY + 90,
+    w: 140,
+    h: 40,
+    label: 'Back',
+    visible: () => getState() === 'settings',
+    onClick: () => setState('menu'),
+  });
 }
 
 export function startGame() {
