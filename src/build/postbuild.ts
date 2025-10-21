@@ -1,5 +1,5 @@
-import { generateIcons } from './make-icons';
-import { rewriteManifest } from './rewrite-manifest';
+import { generateIcons } from './make-icons.ts';
+import { rewriteManifest } from './rewrite-manifest.ts';
 
 const run = async () => {
   await generateIcons();

@@ -3,41 +3,48 @@ export const VH = 640;
 
 export type ViewLayout = {
   dpr: number;
-  vwCss: number; // window.innerWidth
-  vhCss: number; // window.innerHeight
-  scale: number; // CSS px to virtual units
-  offX: number;  // CSS px
-  offY: number;  // CSS px
+  vwCss: number;
+  vhCss: number;
+  vwVirt: number;
+  vhVirt: number;
+  scaleX: number;
+  scaleY: number;
+  offsetX: number;
+  offsetY: number;
 };
 
-// Compute layout from current viewport (no guessing).
 export function computeLayout(): ViewLayout {
-  const vwCss = Math.max(1, Math.floor(window.innerWidth));
-  const vhCss = Math.max(1, Math.floor(window.innerHeight));
-  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-  const scale = Math.min(vwCss / VW, vhCss / VH);
-  const offX = Math.floor((vwCss - VW * scale) / 2);
-  const offY = Math.floor((vhCss - VH * scale) / 2);
-  return { dpr, vwCss, vhCss, scale, offX, offY };
+  const vv = (window as any).visualViewport;
+  const offsetX = vv?.offsetLeft ?? 0;
+  const offsetY = vv?.offsetTop ?? 0;
+  const vwCss = vv?.width ?? window.innerWidth;
+  const vhCss = vv?.height ?? window.innerHeight;
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const scaleX = vwCss / VW;
+  const scaleY = vhCss / VH;
+  return {
+    dpr,
+    vwCss,
+    vhCss,
+    vwVirt: VW,
+    vhVirt: VH,
+    scaleX,
+    scaleY,
+    offsetX,
+    offsetY,
+  };
 }
 
-// Apply render transform for virtual drawing (0..VW, 0..VH).
-export function applyRenderTransform(ctx: CanvasRenderingContext2D, L: ViewLayout) {
-  ctx.setTransform(L.scale * L.dpr, 0, 0, L.scale * L.dpr, L.offX * L.dpr, L.offY * L.dpr);
+export function applyRenderTransform(ctx: CanvasRenderingContext2D, layout: ViewLayout) {
+  ctx.setTransform(layout.scaleX * layout.dpr, 0, 0, layout.scaleY * layout.dpr, 0, 0);
 }
 
-// Map client coords to virtual coords using current layout.
-export function clientToVirtual(clientX: number, clientY: number, L: ViewLayout) {
-  // Read canvas rect in case of browser UI overlays.
-  const rect = (document.getElementById('game') as HTMLCanvasElement).getBoundingClientRect();
-  // client -> CSS coords relative to viewport
-  const xCss = clientX - rect.left - L.offX;
-  const yCss = clientY - rect.top  - L.offY;
-  // CSS -> virtual
-  let x = xCss / L.scale;
-  let y = yCss / L.scale;
-  // clamp
-  x = Math.max(0, Math.min(VW, x));
-  y = Math.max(0, Math.min(VH, y));
+export function clientToVirtual(clientX: number, clientY: number, layout: ViewLayout) {
+  const canvas = document.getElementById('game') as HTMLCanvasElement;
+  const rect = canvas.getBoundingClientRect();
+  const cssX = clientX - rect.left + layout.offsetX;
+  const cssY = clientY - rect.top + layout.offsetY;
+  const x = Math.max(0, Math.min(layout.vwVirt, cssX / layout.scaleX));
+  const y = Math.max(0, Math.min(layout.vhVirt, cssY / layout.scaleY));
   return { x, y };
 }

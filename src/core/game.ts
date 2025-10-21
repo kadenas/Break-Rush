@@ -10,19 +10,17 @@ import {
   resetObstacles,
   commitBest,
   ensureKickstart,
-  getActiveCount,
   getScore,
   getBest,
 } from '../game/obstacles';
 import { getClick } from '../engine/input';
-import { UIButton, drawUI, registerButton, hitUI } from '../ui/ui';
-import { clearButtons, updateSettingsSnapshot } from '../ui/ui';
+import { UIButton, drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
 
 let running = false;
 let raf = 0;
 let last = 0;
-let canvas: HTMLCanvasElement;
-let ctx: CanvasRenderingContext2D;
+let canvas!: HTMLCanvasElement;
+let ctx!: CanvasRenderingContext2D;
 
 const player = createPlayer();
 const obs = createObSystem();
@@ -32,8 +30,6 @@ const settings = {
   fx: localStorage.getItem('br_fx') !== '0',
   low: localStorage.getItem('br_lowpower') === '1',
 };
-
-updateSettingsSnapshot({ lowPower: settings.low });
 
 function saveSettings() {
   localStorage.setItem('br_vibe', settings.vibe ? '1' : '0');
@@ -57,6 +53,7 @@ export function bootGame(c: HTMLCanvasElement) {
   clearButtons();
   const centerX = VW * 0.5;
   const centerY = VH * 0.55;
+  const pad = 8;
 
   const buttons: UIButton[] = [
     {
@@ -84,10 +81,10 @@ export function bootGame(c: HTMLCanvasElement) {
     },
     {
       id: 'pause',
-      x: 8,
-      y: 8,
-      w: 34,
-      h: 28,
+      x: VW - 48 - pad,
+      y: pad,
+      w: 48,
+      h: 32,
       label: 'II',
       visible: () => getState() === 'playing',
       onClick: () => setState('pause'),
@@ -131,9 +128,9 @@ export function bootGame(c: HTMLCanvasElement) {
     {
       id: 'retry',
       x: centerX - 70,
-      y: centerY - 24,
+      y: centerY - 10,
       w: 140,
-      h: 48,
+      h: 44,
       label: 'Retry',
       visible: () => getState() === 'gameover',
       onClick: () => {
@@ -142,24 +139,24 @@ export function bootGame(c: HTMLCanvasElement) {
       },
     },
     {
-      id: 'share-wa',
-      x: centerX - 150,
-      y: centerY + 42,
-      w: 130,
-      h: 40,
-      label: 'WhatsApp',
+      id: 'share',
+      x: centerX - 70,
+      y: centerY + 40,
+      w: 140,
+      h: 44,
+      label: 'Share',
       visible: () => getState() === 'gameover',
-      onClick: () => shareScore('whatsapp'),
+      onClick: () => shareScoreSmart(),
     },
     {
-      id: 'share-tg',
-      x: centerX + 20,
-      y: centerY + 42,
-      w: 130,
-      h: 40,
-      label: 'Telegram',
+      id: 'gomenu',
+      x: centerX - 70,
+      y: centerY + 90,
+      w: 140,
+      h: 44,
+      label: 'Menu',
       visible: () => getState() === 'gameover',
-      onClick: () => shareScore('telegram'),
+      onClick: () => setState('menu'),
     },
     {
       id: 'tog-vibe',
@@ -198,8 +195,6 @@ export function bootGame(c: HTMLCanvasElement) {
       onClick: () => {
         settings.low = !settings.low;
         saveSettings();
-        last = performance.now();
-        updateSettingsSnapshot({ lowPower: settings.low });
       },
     },
     {
@@ -293,26 +288,19 @@ function render(dt: number) {
   ctx.fillRect(0, 0, VW, VH);
 
   const st = getState();
-  if (st === 'menu' || st === 'settings') {
-    ctx.fillStyle = 'rgba(150,40,40,0.45)';
-    ctx.beginPath();
-    ctx.arc(VW * 0.5, VH * 0.6, VW * 0.45, 0, Math.PI * 2);
-    ctx.fill();
+  if (st === 'menu') {
     ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px system-ui';
     ctx.textAlign = 'center';
-    if (st === 'menu') {
-      ctx.font = 'bold 28px system-ui';
-      ctx.fillText('Break Rush', VW * 0.5, VH * 0.55);
-      ctx.font = '16px system-ui';
-      ctx.fillStyle = '#9cc2ff';
-      ctx.fillText('Evita los meteoritos', VW * 0.5, VH * 0.62);
-    } else {
-      ctx.font = 'bold 24px system-ui';
-      ctx.fillText('Settings', VW * 0.5, VH * 0.36);
-      ctx.font = '16px system-ui';
-      ctx.fillStyle = '#9cc2ff';
-      ctx.fillText('Configura tus preferencias', VW * 0.5, VH * 0.42);
-    }
+    ctx.fillText('Break Rush', VW * 0.5, VH * 0.42);
+    ctx.fillStyle = '#9cc2ff';
+    ctx.font = '16px system-ui';
+    ctx.fillText('Evita los meteoritos', VW * 0.5, VH * 0.48);
+  } else if (st === 'settings') {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Settings', VW * 0.5, VH * 0.34);
   } else {
     drawObstacles(ctx, obs);
     drawPlayer(ctx, player);
@@ -321,32 +309,18 @@ function render(dt: number) {
     ctx.font = '16px system-ui';
     ctx.textAlign = 'left';
     ctx.fillText(`Score ${getScore(obs)}`, 8, 22);
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '12px system-ui';
     ctx.fillText(`Best ${getBest(obs)}`, 8, 38);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.textAlign = 'right';
-    ctx.fillText(`Meteors ${getActiveCount(obs)}`, VW - 8, 22);
 
-    if (st === 'pause') {
+    if (st === 'pause' || st === 'gameover') {
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(0, 0, VW, VH);
       ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
       ctx.font = 'bold 26px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('PAUSE', VW * 0.5, VH * 0.4);
-    }
-
-    if (st === 'gameover') {
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(0, 0, VW, VH);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 28px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('GAME OVER', VW * 0.5, VH * 0.45);
-      ctx.font = '16px system-ui';
-      ctx.fillText('Pulsa un botón para continuar', VW * 0.5, VH * 0.54);
-    } else if (st === 'playing') {
+      ctx.fillText(st === 'pause' ? 'PAUSE' : 'GAME OVER', VW * 0.5, VH * 0.40);
+    } else {
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.font = '16px system-ui';
       ctx.textAlign = 'right';
@@ -358,15 +332,17 @@ function render(dt: number) {
   drawDebugHUD(ctx, dt, layout, canvas);
 }
 
-function shareScore(kind: 'whatsapp' | 'telegram') {
+function shareScoreSmart() {
   const score = getScore(obs);
   const url = `${location.origin}${location.pathname}`;
-  const text = `Mi puntuación en Break Rush: ${score} pts ${url}`;
-  let href = '';
-  if (kind === 'whatsapp') {
-    href = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  const text = `Mi puntuación en Break Rush: ${score} pts`;
+  if (navigator.share) {
+    navigator.share({ title: 'Break Rush', text, url }).catch(() => {});
   } else {
-    href = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    const whatsapp = `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`;
+    const telegram = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    const useWhatsapp = window.confirm('Share via WhatsApp? Cancel for Telegram.');
+    const href = useWhatsapp ? whatsapp : telegram;
+    window.open(href, '_blank', 'noreferrer');
   }
-  window.open(href, '_blank', 'noreferrer');
 }
