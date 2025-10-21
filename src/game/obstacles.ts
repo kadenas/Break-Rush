@@ -239,3 +239,6 @@ export function commitBest(sys: ObSystem) {
 export function getActiveCount(sys: ObSystem){ return sys.active.length; }
 export function getScore(sys: ObSystem){ return Math.floor(sys.score); }
 export function getBest(sys: ObSystem){ return sys.best; }
+export function getWave(sys: ObSystem) {
+  return sys.waveIntensity || 0;
+}
