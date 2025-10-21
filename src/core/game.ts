@@ -9,17 +9,109 @@ import {
   collideCircle,
   resetObstacles,
   commitBest,
+  ensureKickstart,
+  getActiveCount,
 } from '../game/obstacles';
+import { getClick } from '../engine/input';
+import { initUI, UIButton, drawUI, registerButton, hitUI } from '../ui/ui';
 
 let running = false;
 let raf = 0;
 let last = 0;
 let canvas: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D;
+let debugHotkeyBound = false;
 
 const player = createPlayer();
-const obs = createObSystem();
-let debugHotkeyBound = false;
+const obstacles = createObSystem();
+
+function resetRun() {
+  player.x = VW / 2;
+  player.y = VH * 0.8;
+  resetObstacles(obstacles);
+}
+
+function registerButtons() {
+  const centerX = VW * 0.5;
+  const centerY = VH * 0.55;
+
+  const buttons: UIButton[] = [
+    {
+      id: 'start',
+      x: centerX - 70,
+      y: centerY - 24,
+      w: 140,
+      h: 48,
+      label: 'Start',
+      visible: () => getState() === 'menu',
+      onClick: () => {
+        resetRun();
+        setState('playing');
+      },
+    },
+    {
+      id: 'pause',
+      x: 10,
+      y: 10,
+      w: 34,
+      h: 28,
+      label: 'II',
+      visible: () => getState() === 'playing',
+      onClick: () => setState('pause'),
+    },
+    {
+      id: 'resume',
+      x: centerX - 70,
+      y: centerY - 80,
+      w: 140,
+      h: 44,
+      label: 'Resume',
+      visible: () => getState() === 'pause',
+      onClick: () => setState('playing'),
+    },
+    {
+      id: 'restart',
+      x: centerX - 70,
+      y: centerY - 24,
+      w: 140,
+      h: 44,
+      label: 'Restart',
+      visible: () => getState() === 'pause',
+      onClick: () => {
+        resetRun();
+        setState('playing');
+      },
+    },
+    {
+      id: 'menu',
+      x: centerX - 70,
+      y: centerY + 32,
+      w: 140,
+      h: 44,
+      label: 'Menu',
+      visible: () => {
+        const state = getState();
+        return state === 'pause' || state === 'gameover';
+      },
+      onClick: () => setState('menu'),
+    },
+    {
+      id: 'retry',
+      x: centerX - 70,
+      y: centerY - 24,
+      w: 140,
+      h: 48,
+      label: 'Retry',
+      visible: () => getState() === 'gameover',
+      onClick: () => {
+        resetRun();
+        setState('playing');
+      },
+    },
+  ];
+
+  for (const button of buttons) registerButton(button);
+}
 
 export function bootGame(c: HTMLCanvasElement) {
   canvas = c;
@@ -27,7 +119,10 @@ export function bootGame(c: HTMLCanvasElement) {
   if (!g) throw new Error('Canvas 2D no disponible');
   ctx = g;
   running = false;
+
   initDebug();
+  initUI(() => {});
+  registerButtons();
 
   if (!debugHotkeyBound) {
     window.addEventListener('keydown', (event) => {
@@ -49,28 +144,51 @@ export function stopGame() {
   if (raf) cancelAnimationFrame(raf);
 }
 
+function processClick(x: number, y: number) {
+  const consumed = hitUI(x, y);
+  if (consumed) return;
+
+  const state = getState();
+  if (state === 'gameover') {
+    resetRun();
+    setState('playing');
+  } else if (state === 'menu') {
+    resetRun();
+    setState('playing');
+  }
+}
+
 function loop(now: number) {
   if (!running) return;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
+  const click = getClick();
+  if (click) processClick(click.x, click.y);
+
   const state = getState();
   if (state === 'playing') {
     updatePlayer(player, dt);
-    updateObstacles(obs, dt);
+    ensureKickstart(obstacles);
+    updateObstacles(obstacles, dt);
 
-    for (let i = 0; i < obs.active.length; i++) {
-      const ob = obs.pool[obs.active[i]];
-      if (collideCircle(player.x, player.y, player.r, ob)) {
-        commitBest(obs);
+    for (const index of obstacles.active) {
+      const obstacle = obstacles.pool[index];
+      if (!obstacle.alive) continue;
+      if (collideCircle(player.x, player.y, player.r, obstacle)) {
+        commitBest(obstacles);
         setState('gameover');
         break;
       }
     }
   }
 
-  const layout = computeLayout();
+  render(dt);
+  raf = requestAnimationFrame(loop);
+}
 
+function render(dt: number) {
+  const layout = computeLayout();
   const wantW = Math.floor(layout.vwCss * layout.dpr);
   const wantH = Math.floor(layout.vhCss * layout.dpr);
   if (canvas.width !== wantW || canvas.height !== wantH) {
@@ -85,58 +203,66 @@ function loop(now: number) {
   ctx.fillStyle = '#0b1f33';
   ctx.fillRect(0, 0, VW, VH);
 
+  const state = getState();
   if (state === 'menu') {
     ctx.fillStyle = 'rgba(150,40,40,0.45)';
     ctx.beginPath();
-    ctx.arc(VW * 0.5, VH * 0.62, VW * 0.45, 0, Math.PI * 2);
+    ctx.arc(VW * 0.5, VH * 0.6, VW * 0.45, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 28px system-ui';
     ctx.textAlign = 'center';
-    ctx.fillText('Break Rush', VW * 0.5, VH * 0.6);
-    ctx.font = '18px system-ui';
+    ctx.fillText('Break Rush', VW * 0.5, VH * 0.55);
+    ctx.font = '16px system-ui';
     ctx.fillStyle = '#9cc2ff';
-    ctx.fillText('Tap para jugar', VW * 0.5, VH * 0.68);
+    ctx.fillText('Evita los meteoritos', VW * 0.5, VH * 0.62);
   } else {
-    drawObstacles(ctx, obs);
+    drawObstacles(ctx, obstacles);
     drawPlayer(ctx, player);
 
+    const score = Math.floor(obstacles.score);
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.font = '16px system-ui';
     ctx.textAlign = 'left';
-    ctx.fillText(`Score ${Math.floor(obs.score)}`, 8, 22);
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillText(`Score ${score}`, 8, 22);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.font = '12px system-ui';
-    ctx.fillText(`Best ${obs.best}`, 8, 38);
+    ctx.fillText(`Best ${obstacles.best}`, 8, 38);
 
-    if (state === 'gameover') {
+    ctx.textAlign = 'right';
+    ctx.font = '12px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(`Meteors ${getActiveCount(obstacles)}`, VW - 8, 38);
+
+    if (state === 'playing') {
+      ctx.font = '16px system-ui';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillText('PLAYING', VW - 8, 22);
+    }
+
+    if (state === 'pause' || state === 'gameover') {
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(0, 0, VW, VH);
+
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 28px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('GAME OVER', VW * 0.5, VH * 0.45);
-      ctx.font = '16px system-ui';
-      ctx.fillText('Tap para reintentar', VW * 0.5, VH * 0.54);
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.font = '16px system-ui';
-      ctx.textAlign = 'right';
-      ctx.fillText('PLAYING', VW - 8, 22);
+      if (state === 'pause') {
+        ctx.font = 'bold 26px system-ui';
+        ctx.fillText('PAUSE', VW * 0.5, VH * 0.4);
+      } else {
+        ctx.font = 'bold 28px system-ui';
+        ctx.fillText('GAME OVER', VW * 0.5, VH * 0.45);
+        ctx.font = '16px system-ui';
+        ctx.fillText('Tap para reintentar', VW * 0.5, VH * 0.54);
+      }
     }
   }
 
+  drawUI(ctx);
   drawDebugHUD(ctx, dt, layout, canvas);
-  raf = requestAnimationFrame(loop);
 }
 
 export function restartRun() {
-  player.x = VW / 2;
-  player.y = VH * 0.8;
-  resetObstacles(obs);
+  resetRun();
   setState('playing');
-}
-
-export function commitBestScore() {
-  commitBest(obs);
 }
