@@ -17,7 +17,7 @@ import {
 import { getClick } from '../engine/input';
 import { drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
 import { updateMessages, drawMessages, resetMessages, maybeSpawnAuto, spawnMilestoneMessage } from '../fx/messages';
-import { audioInit, startMusic, stopMusic, setMusic, setSfx, playSfx } from '../fx/audio';
+import { audioInit, startMusic, stopMusic, setMusic, setSfx, playSfx, unlockAudio, playBrand } from '../fx/audio';
 
 let running = false;
 let raf = 0;
@@ -27,8 +27,6 @@ let ctx!: CanvasRenderingContext2D;
 
 const player = createPlayer();
 const obs = createObSystem();
-
-audioInit({ music: true, sfx: true });
 
 const settings = {
   vibe: localStorage.getItem('br_vibe') === '1',
@@ -41,6 +39,22 @@ setSfx(settings.fx);
 setMusic(settings.music);
 
 let nextMilestone = 100;
+let aliveTime = 0;
+let levelBannerT = 0;
+let levelShown = 1;
+
+type Flash = { t:number, life:number, x:number, y:number, r:number };
+let flashes: Flash[] = [];
+
+let totalRank = Number(localStorage.getItem('br_rank') || '0') || 0;
+function beltName(points:number) {
+  if (points >= 10000) return 'Mastodonte Cósmico';
+  if (points >= 5000)  return 'León Estelar';
+  if (points >= 2000)  return 'Tritón Galáctico';
+  if (points >= 1000)  return 'Albatros de Meteoro';
+  if (points >= 500)   return 'Timón de Acero';
+  return 'Grumete Meteoro';
+}
 
 function saveSettings() {
   localStorage.setItem('br_vibe', settings.vibe ? '1' : '0');
@@ -60,6 +74,10 @@ function resetRun() {
 const goPlay = () => {
   resetRun();
   resetMessages();
+  flashes = [];
+  aliveTime = 0;
+  levelBannerT = 0;
+  levelShown = 1;
   nextMilestone = 100;
   if (settings.music) startMusic();
   setState('playing');
@@ -71,6 +89,22 @@ export function bootGame(c: HTMLCanvasElement) {
   if (!g) throw new Error('Canvas 2D no disponible');
   ctx = g;
   running = false;
+
+  audioInit({ music: true, sfx: true });
+
+  const gate = document.getElementById('gate');
+  const btn = document.getElementById('gate-btn');
+  let gateFired = false;
+  const fireGate = async () => {
+    if (gateFired) return;
+    gateFired = true;
+    try { await unlockAudio(); } catch {}
+    playBrand();
+    setState('menu');
+    gate?.remove();
+  };
+  btn?.addEventListener('pointerdown', () => { void fireGate(); }, { once:true });
+  btn?.addEventListener('click', () => { void fireGate(); }, { once:true });
 
   clearButtons();
   // constantes de layout UI
@@ -312,6 +346,7 @@ function loop(now: number) {
     nextMilestone = 100;
   }
   if (st === 'playing') {
+    aliveTime += dt;
     updatePlayer(player, dt);
     ensureKickstart(obs);
     updateObstacles(obs, dt);
@@ -321,6 +356,9 @@ function loop(now: number) {
     if (sc >= nextMilestone) {
       spawnMilestoneMessage();
       playSfx('level');
+      levelShown = Math.floor(sc / 100) + 1;
+      levelBannerT = 1.2;
+      flashes.push({ t:0, life:0.25, x:player.x, y:player.y, r:80 });
       nextMilestone += 100;
     }
 
@@ -337,6 +375,9 @@ function loop(now: number) {
             /* ignore */
           }
         }
+        const earned = Math.floor(sc / 50);
+        totalRank += earned;
+        localStorage.setItem('br_rank', String(totalRank));
         stopMusic();
         setState('gameover');
         break;
@@ -364,7 +405,8 @@ function render(dt: number) {
 
   // 2) Fondo dinámico con alpha, para no borrar la estela
   const wave = getWave(obs);
-  drawReactiveBackground(ctx, wave, 0.35); // 35% opacidad
+  const timeTint = Math.min(1, Math.max(0, (aliveTime - 30) / 60));
+  drawReactiveBackgroundWithTime(ctx, wave, timeTint, 0.35);
 
   const st = getState();
 
@@ -394,7 +436,7 @@ function render(dt: number) {
     // Menús
     if (st === 'menu') {
       ctx.fillStyle='#fff'; ctx.font='bold 28px system-ui'; ctx.textAlign='center';
-      ctx.fillText('Break Rush', VW*0.5, VH*0.42);
+      ctx.fillText('Break Rush – by Kapitán Jero', VW*0.5, VH*0.42);
       ctx.fillStyle='#9cc2ff'; ctx.font='16px system-ui';
       ctx.fillText('Evita los meteoritos', VW*0.5, VH*0.48);
     }
@@ -404,9 +446,44 @@ function render(dt: number) {
     }
   }
 
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    const f = flashes[i];
+    f.t += dt;
+    const a = 1 - f.t / f.life;
+    if (a <= 0) { flashes.splice(i,1); continue; }
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, a)) * 0.8;
+    const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * (1 + f.t * 4));
+    grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,VW,VH);
+    ctx.restore();
+  }
+
+  if (levelBannerT > 0) {
+    levelBannerT -= dt;
+    const a = Math.min(1, levelBannerT * 3);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 22px system-ui';
+    ctx.fillText(`Nivel ${levelShown}`, VW*0.5, VH*0.18);
+    ctx.restore();
+  }
+
   // Mensajes motivacionales
   updateMessages(dt);
   drawMessages(ctx);
+
+  if (st === 'gameover') {
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.textAlign='center';
+    ctx.font='14px system-ui';
+    const belt = beltName(totalRank);
+    ctx.fillText(`Rango total: ${totalRank} · ${belt}`, VW*0.5, VH*0.48);
+  }
 
   // UI (botones)
   drawUI(ctx);
@@ -438,22 +515,34 @@ function applyFrameFade(ctx: CanvasRenderingContext2D, alpha: number) {
   ctx.restore();
 }
 
-function drawReactiveBackground(ctx: CanvasRenderingContext2D, intensity: number, alpha: number = 1) {
-  const t = Math.max(0, Math.min(1, intensity));
-  const from = { r: 7, g: 26, b: 42 };   // #071a2a
-  const to   = { r: 32, g: 10, b: 34 };  // #200a22
-  const r = Math.round(from.r + (to.r - from.r) * t);
-  const g = Math.round(from.g + (to.g - from.g) * t);
-  const b = Math.round(from.b + (to.b - from.b) * t);
+function drawReactiveBackgroundWithTime(ctx: CanvasRenderingContext2D, intensity: number, timeTint: number, alpha: number) {
+  const clamp = (v:number)=>Math.max(0,Math.min(1,v));
+  const w = clamp(intensity);
+  const t = clamp(timeTint);
+
+  const base = { r: 7, g: 26, b: 42 };
+  const vio  = { r:32, g:10, b:34 };
+  const red  = { r:54, g:8,  b:10 };
+
+  const mix1 = {
+    r: Math.round(base.r + (vio.r - base.r) * w),
+    g: Math.round(base.g + (vio.g - base.g) * w),
+    b: Math.round(base.b + (vio.b - base.b) * w),
+  };
+  const mix2 = {
+    r: Math.round(mix1.r + (red.r - mix1.r) * t),
+    g: Math.round(mix1.g + (red.g - mix1.g) * t),
+    b: Math.round(mix1.b + (red.b - mix1.b) * t),
+  };
 
   const cx = VW * 0.5, cy = VH * 0.45;
   const grd = ctx.createRadialGradient(cx, cy, Math.min(VW, VH) * 0.1, cx, cy, Math.max(VW, VH));
-  grd.addColorStop(0, `rgb(${r+10}, ${g+10}, ${b+10})`);
-  grd.addColorStop(1, `rgb(${r}, ${g}, ${b})`);
+  grd.addColorStop(0, `rgb(${mix2.r+10}, ${mix2.g+10}, ${mix2.b+10})`);
+  grd.addColorStop(1, `rgb(${mix2.r}, ${mix2.g}, ${mix2.b})`);
 
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
   ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, VW, VH);
+  ctx.fillRect(0,0,VW,VH);
   ctx.restore();
 }
