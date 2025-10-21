@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';
-import { encodePNG } from './png-encoder';
+import { encodePNG } from './png-encoder.ts';
 
 interface Canvas {
   width: number;

@@ -1,23 +1,15 @@
-export type UILabel = string | (() => string);
-
 export type UIButton = {
   id: string;
   x: number;
   y: number;
   w: number;
   h: number;
-  label: UILabel;
+  label: string | (() => string);
   visible: () => boolean;
   onClick: () => void;
 };
 
 const buttons: UIButton[] = [];
-
-export interface UIDebugSettings {
-  lowPower: boolean;
-}
-
-let debugSettings: UIDebugSettings = { lowPower: false };
 
 export function registerButton(btn: UIButton) {
   buttons.push(btn);
@@ -25,14 +17,6 @@ export function registerButton(btn: UIButton) {
 
 export function clearButtons() {
   buttons.length = 0;
-}
-
-export function updateSettingsSnapshot(partial: Partial<UIDebugSettings>) {
-  debugSettings = { ...debugSettings, ...partial };
-}
-
-export function getSettings(): UIDebugSettings {
-  return debugSettings;
 }
 
 export function drawUI(ctx: CanvasRenderingContext2D) {
@@ -46,9 +30,9 @@ export function drawUI(ctx: CanvasRenderingContext2D) {
     ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 1.2;
     ctx.stroke();
+    const text = typeof b.label === 'function' ? b.label() : b.label;
     ctx.fillStyle = '#e9f3ff';
-    const text = resolveLabel(b.label);
-    ctx.font = (b.h > 40 ? 'bold 20px ' : 'bold 16px ') + 'system-ui';
+    ctx.font = 'bold 16px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, b.x + b.w / 2, b.y + b.h / 2);
@@ -57,8 +41,7 @@ export function drawUI(ctx: CanvasRenderingContext2D) {
 }
 
 export function hitUI(x: number, y: number): boolean {
-  for (let i = buttons.length - 1; i >= 0; i--) {
-    const b = buttons[i];
+  for (const b of buttons) {
     if (!b.visible()) continue;
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
       b.onClick();
@@ -66,10 +49,6 @@ export function hitUI(x: number, y: number): boolean {
     }
   }
   return false;
-}
-
-function resolveLabel(label: UILabel): string {
-  return typeof label === 'function' ? label() : label;
 }
 
 function roundRect(
