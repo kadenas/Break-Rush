@@ -1,10 +1,10 @@
-import { AudioManager } from '../audioManager';
+import { AudioManager, type PlayHandle } from '../audioManager';
 
 type TrackName = 'whoosh' | 'level' | 'crash';
 
 let musicEnabled = true;
 let sfxEnabled = true;
-let musicSource: AudioBufferSourceNode | null = null;
+let musicSource: PlayHandle | null = null;
 
 export function audioInit(opts?: { music?: boolean; sfx?: boolean }) {
   musicEnabled = opts?.music ?? (localStorage.getItem('br_music') !== '0');
@@ -36,58 +36,51 @@ export async function startMusic() {
   if (!musicEnabled) return;
 
   stopMusic();
-  try {
-    musicSource = (await AudioManager.play('loop', { loop: true, vol: 0.35 })) ?? null;
-  } catch {
-    musicSource = null;
-  }
+  musicSource = (await AudioManager.play('loop', { loop: true, vol: 0.35 })) ?? null;
 }
 
 export function stopMusic() {
   if (!musicSource) return;
-  try {
-    musicSource.stop();
-  } catch {
-    // ignore stop errors
-  }
-  try {
-    musicSource.disconnect();
-  } catch {
-    // ignore disconnect errors
+  if ('stop' in musicSource) {
+    try {
+      musicSource.stop();
+    } catch {
+      // ignore stop errors
+    }
+    try {
+      musicSource.disconnect();
+    } catch {
+      // ignore disconnect errors
+    }
+  } else {
+    musicSource.pause();
+    musicSource.currentTime = 0;
   }
   musicSource = null;
 }
 
 export function playBrand() {
-  void AudioManager.play('loop4', { vol: 0.5 }).catch(() => {
-    // brand sound is optional, ignore errors
-  });
+  void AudioManager.play('loop4', { vol: 0.5 });
 }
 
 export function playSfx(name: TrackName) {
   if (!sfxEnabled) return;
 
   if (name === 'crash') {
-    void AudioManager.play('loop3', { vol: 0.8 })
-      .then((src) => {
-        if (!src) synthCrash();
-      })
-      .catch(() => synthCrash());
+    void AudioManager.play('loop3', { vol: 0.8 }).then((src) => {
+      if (!src) synthCrash();
+    });
     return;
   }
 
   if (name === 'level') {
-    void AudioManager.play('level', { vol: 0.8 })
-      .then((src) => {
-        if (!src) synthPing();
-      })
-      .catch(() => synthPing());
+    void AudioManager.play('level', { vol: 0.8 }).then((src) => {
+      if (!src) synthPing();
+    });
     return;
   }
 
-  void AudioManager.play('whoosh', { vol: 0.6 }).catch(() => {
-    // ignore errors; no fallback required for whoosh
-  });
+  void AudioManager.play('whoosh', { vol: 0.6 });
 }
 
 function getCtx() {
