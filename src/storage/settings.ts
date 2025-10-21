@@ -1,4 +1,4 @@
-import { ControlMode } from '../engine/input';
+export type ControlMode = 'drag' | 'lanes';
 
 export interface Settings {
   theme: 'high-contrast' | 'colorblind';
