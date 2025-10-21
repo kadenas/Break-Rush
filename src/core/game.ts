@@ -121,7 +121,7 @@ export function bootGame(c: HTMLCanvasElement) {
   registerButton({
     id: 'resume',
     x: centerX - BTN_W / 2,
-    y: centerY - (BTN_H + GAP),
+    y: centerY - (BTN_H * 1.5 + GAP),
     w: BTN_W,
     h: BTN_H,
     label: 'Resume',
@@ -134,9 +134,19 @@ export function bootGame(c: HTMLCanvasElement) {
     },
   });
   registerButton({
+    id: 'settings-from-pause',
+    x: centerX - BTN_W / 2,
+    y: centerY - (BTN_H * 0.5),
+    w: BTN_W,
+    h: BTN_H,
+    label: 'Settings',
+    visible: () => getState() === 'pause',
+    onClick: () => setState('settings'),
+  });
+  registerButton({
     id: 'restart',
     x: centerX - BTN_W / 2,
-    y: centerY,
+    y: centerY + (BTN_H * 0.5 + GAP),
     w: BTN_W,
     h: BTN_H,
     label: 'Restart',
@@ -146,7 +156,7 @@ export function bootGame(c: HTMLCanvasElement) {
   registerButton({
     id: 'menu',
     x: centerX - BTN_W / 2,
-    y: centerY + (BTN_H + GAP),
+    y: centerY + (BTN_H * 1.5 + GAP * 2),
     w: BTN_W,
     h: BTN_H,
     label: 'Menu',
@@ -318,6 +328,7 @@ function loop(now: number) {
       const o = obs.pool[idx];
       if (!o.alive) continue;
       if (collideCircle(player.x, player.y, player.r, o)) {
+        playSfx('crash');
         commitBest(obs);
         if (settings.vibe && 'vibrate' in navigator) {
           try {
@@ -327,7 +338,6 @@ function loop(now: number) {
           }
         }
         stopMusic();
-        playSfx('crash'); // sonido sintético sin binarios
         setState('gameover');
         break;
       }
