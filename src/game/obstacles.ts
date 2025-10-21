@@ -7,6 +7,10 @@ export interface Obstacle {
   vy: number;
   alive: boolean;
   scored: boolean;
+  lane: number;
+  spawnTime: number;
+  scoreValue: number;
+  big: boolean;
 }
 
 export interface ObstacleSystem {
@@ -18,6 +22,8 @@ export interface ObstacleSystem {
   score: number;
   best: number;
   kicked: boolean;
+  waveTimer: number;
+  waveIntensity: number;
 }
 
 const POOL_SIZE = 64;
@@ -32,6 +38,10 @@ export function createObSystem(): ObstacleSystem {
       vy: 120,
       alive: false,
       scored: false,
+      lane: -1,
+      spawnTime: -1,
+      scoreValue: 10,
+      big: false,
     })),
     active: [],
     tSpawn: 0,
@@ -40,6 +50,8 @@ export function createObSystem(): ObstacleSystem {
     score: 0,
     best,
     kicked: false,
+    waveTimer: 0,
+    waveIntensity: 0,
   };
 }
 
@@ -53,6 +65,8 @@ export function resetObstacles(sys: ObstacleSystem) {
   sys.elapsed = 0;
   sys.score = 0;
   sys.kicked = false;
+  sys.waveTimer = 0;
+  sys.waveIntensity = 0;
 }
 
 function allocate(sys: ObstacleSystem): Obstacle | null {
@@ -62,30 +76,106 @@ function allocate(sys: ObstacleSystem): Obstacle | null {
       sys.active.push(i);
       ob.alive = true;
       ob.scored = false;
+      ob.big = false;
       return ob;
     }
   }
   return null;
 }
 
+const LANES = 5;
+
+function shuffleLanes(): number[] {
+  const order = Array.from({ length: LANES }, (_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
+
+function easeOutCubic(t: number) {
+  const inv = 1 - Math.min(Math.max(t, 0), 1);
+  return 1 - inv * inv * inv;
+}
+
+function getWaveIntensity(sys: ObstacleSystem) {
+  const WAVE_LENGTH = 15;
+  const COOL_LENGTH = 5;
+  const TOTAL = WAVE_LENGTH + COOL_LENGTH;
+  let t = sys.waveTimer % TOTAL;
+  if (t < WAVE_LENGTH) {
+    return t / WAVE_LENGTH;
+  }
+  const coolT = (t - WAVE_LENGTH) / COOL_LENGTH;
+  return 1 - easeOutCubic(coolT) * 0.4;
+}
+
+function canSpawnInLane(
+  sys: ObstacleSystem,
+  lane: number,
+  spawnY: number,
+): boolean {
+  for (const index of sys.active) {
+    const other = sys.pool[index];
+    if (!other.alive || other.lane !== lane) continue;
+    if (other.spawnTime < 0) continue;
+    if (sys.elapsed - other.spawnTime > 0.6) continue;
+    if (Math.abs(other.y - spawnY) < 70) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function spawn(sys: ObstacleSystem) {
   const obstacle = allocate(sys);
   if (!obstacle) return;
 
-  const lanes = 5;
-  const laneWidth = VW / lanes;
-  const lane = Math.floor(Math.random() * lanes);
-  const cx = laneWidth * (lane + 0.5);
-
-  const elapsed = sys.elapsed;
+  const laneWidth = VW / LANES;
+  const waveIntensity = sys.waveIntensity;
   const baseSpeed = 140;
-  const speedBoost = Math.min(260, elapsed * 12);
-  const radius = 12 + Math.min(16, elapsed * 0.45);
+  const baseRadius = 12 + Math.min(16, sys.elapsed * 0.35);
+  const isBig = Math.random() < 0.1;
+  const radiusMultiplier = isBig ? 1.6 : 1;
+  const radius = baseRadius * radiusMultiplier;
 
-  obstacle.x = cx + (Math.random() * 18 - 9);
-  obstacle.y = -radius - 12;
+  const laneOrder = shuffleLanes();
+  let selectedLane = -1;
+  let spawnX = 0;
+  let spawnY = 0;
+  let laneCenter = 0;
+
+  for (const lane of laneOrder) {
+    laneCenter = laneWidth * (lane + 0.5);
+    const proposedY = -radius - 12;
+    if (!canSpawnInLane(sys, lane, proposedY)) {
+      continue;
+    }
+    selectedLane = lane;
+    spawnX = laneCenter + (Math.random() * (laneWidth * 0.45) - laneWidth * 0.225);
+    spawnY = proposedY;
+    break;
+  }
+
+  if (selectedLane === -1) {
+    obstacle.alive = false;
+    obstacle.lane = -1;
+    sys.active.pop();
+    return;
+  }
+
+  const speedBonus = waveIntensity * 120;
+  const vy = (baseSpeed + speedBonus) * (isBig ? 0.75 : 1);
+
+  obstacle.x = spawnX;
+  obstacle.y = spawnY;
   obstacle.r = radius;
-  obstacle.vy = baseSpeed + speedBoost;
+  obstacle.vy = vy;
+  obstacle.lane = selectedLane;
+  obstacle.spawnTime = sys.elapsed;
+  obstacle.scoreValue = isBig ? 30 : 10;
+  obstacle.big = isBig;
   sys.kicked = true;
 }
 
@@ -98,9 +188,14 @@ export function ensureKickstart(sys: ObstacleSystem) {
 export function updateObstacles(sys: ObstacleSystem, dt: number) {
   sys.elapsed += dt;
   sys.tSpawn += dt;
+  sys.waveTimer += dt;
 
-  const targetEvery = Math.max(0.28, 0.9 - sys.elapsed * 0.015);
-  sys.spawnEvery += (targetEvery - sys.spawnEvery) * 0.15;
+  const waveIntensity = getWaveIntensity(sys);
+  sys.waveIntensity = waveIntensity;
+
+  const baseSpawn = 0.9;
+  const targetEvery = Math.max(0.35, baseSpawn - waveIntensity * 0.25);
+  sys.spawnEvery = targetEvery;
 
   if (sys.tSpawn >= sys.spawnEvery) {
     sys.tSpawn = 0;
@@ -118,7 +213,7 @@ export function updateObstacles(sys: ObstacleSystem, dt: number) {
     ob.y += ob.vy * dt;
 
     if (!ob.scored && ob.y - ob.r > VH) {
-      sys.score += 10;
+      sys.score += ob.scoreValue;
       ob.scored = true;
     }
 
