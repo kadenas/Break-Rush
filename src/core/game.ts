@@ -61,9 +61,7 @@ const goPlay = () => {
   resetRun();
   resetMessages();
   nextMilestone = 50;
-  if (settings.music) {
-    void startMusic();
-  }
+  if (settings.music) startMusic();
   setState('playing');
 };
 
@@ -352,8 +350,6 @@ function render(dt: number) {
   const wave = getWave(obs);
   drawReactiveBackground(ctx, wave);
 
-  updateMessages(dt);
-
   const st = getState();
   if (st === 'menu') {
     ctx.fillStyle = '#fff';
@@ -395,6 +391,7 @@ function render(dt: number) {
     }
   }
 
+  updateMessages(dt);
   drawMessages(ctx);
   drawUI(ctx);
   drawDebugHUD(ctx, dt, layout, canvas);
