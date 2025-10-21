@@ -1,6 +1,47 @@
 import { VW, VH } from '../engine/viewport';
 
-// Mensajes motivacionales con animación flotante
+// Configuración de ritmo
+const MIN_GAP = 7;      // segundos mínimos entre mensajes auto
+const MAX_GAP = 12;     // segundos máximos entre mensajes auto
+const MAX_ACTIVE = 2;   // no más de 2 simultáneos en pantalla
+const RECENT_SIZE = 4;  // evitemos repetir de los últimos 4
+
+// Pool general (sin "Subidón")
+type Phrase = { text: string; weight: number };
+const CHOICES: Phrase[] = [
+  { text: '¡Genial!', weight: 3 },
+  { text: '¡Perfecto!', weight: 2 },
+  { text: '¡Muy bien!', weight: 2 },
+  { text: '¡Imparable!', weight: 2 },
+  { text: '¡Vas fino!', weight: 2 },
+  { text: '¡Crack!', weight: 2 },
+  { text: '¡Seguimos!', weight: 2 },
+  { text: '¡De fábula!', weight: 1 },
+  { text: '¡Fabuloso!', weight: 1 },
+  { text: '¡A tope!', weight: 2 },
+  { text: '¡Fiera!', weight: 1 },
+  { text: '¡Máquina!', weight: 1 },
+  { text: '¡Animal!', weight: 1 },
+  { text: '¡Vas en la llama!', weight: 1 },
+  { text: '¡León!', weight: 1 },
+  { text: '¡Plus ultra!', weight: 1 },
+  { text: '¡Excavadora!', weight: 1 },
+  { text: '¡Champion!', weight: 1 },
+  { text: '¡Fenómeno!', weight: 1 },
+  { text: '¡Fastuoso!', weight: 1 },
+  { text: '¡Estamos orgullosos!', weight: 1 },
+  { text: '¡Mastodonte!', weight: 1 },
+];
+
+// Pool específico para hito
+const MILESTONE_CHOICES: Phrase[] = [
+  { text: '¡Subidón!', weight: 3 },
+  { text: '¡Nivel superado!', weight: 2 },
+  { text: '¡Racha brutal!', weight: 2 },
+  { text: '¡Sigues a tope!', weight: 1 },
+];
+
+// Mensaje animado
 type Msg = {
   text: string;
   x: number;
@@ -13,48 +54,49 @@ type Msg = {
 };
 
 const ACTIVE: Msg[] = [];
-const CHOICES = [
-  '¡Genial!',
-  '¡Perfecto!',
-  '¡Muy bien!',
-  '¡Imparable!',
-  '¡Vas fino!',
-  '¡Crack!',
-  '¡Seguimos!',
-  '¡De fábula!',
-  '¡Fabuloso!',
-  '¡A tope!',
-  '¡Fiera!',
-  '¡Máquina!',
-  '¡Animal!',
-  '¡Vas en la llama!',
-  '¡León!',
-  '¡Plus ultra!',
-  '¡Excavadora!',
-  '¡Champion!',
-  '¡Fenómeno!',
-  '¡Fastuoso!',
-  '¡Estamos orgullosos!',
-  '¡Mastodonte!',
-];
+let cooldown = randGap(MIN_GAP, MAX_GAP);
+const recent: string[] = [];
 
-let cooldown = 0;
+let milestoneCooldown = 0; // enfriamiento para mensajes de hito
 
 export function resetMessages() {
   ACTIVE.length = 0;
-  cooldown = 0;
+  cooldown = randGap(MIN_GAP, MAX_GAP);
+  recent.length = 0;
+  milestoneCooldown = 0;
 }
 
-export function maybeSpawnAuto(dt: number) {
+export function updateMessages(dt: number) {
+  // actualizar animaciones
+  for (let i = ACTIVE.length - 1; i >= 0; i--) {
+    const m = ACTIVE[i];
+    if (!m.alive) { ACTIVE.splice(i, 1); continue; }
+    m.t += dt;
+    m.y += m.vy * dt;
+    if (m.t >= m.life) { m.alive = false; ACTIVE.splice(i, 1); }
+  }
+  // timers
   cooldown -= dt;
+  milestoneCooldown = Math.max(0, milestoneCooldown - dt);
+}
+
+export function maybeSpawnAuto() {
+  if (ACTIVE.length >= MAX_ACTIVE) return;
   if (cooldown > 0) return;
-  cooldown = 6 + Math.random() * 2;
-  spawnMessage();
+  // próxima ventana
+  cooldown = randGap(MIN_GAP, MAX_GAP);
+  spawnMessage(pickWeighted(CHOICES));
+}
+
+export function spawnMilestoneMessage() {
+  if (milestoneCooldown > 0) return;
+  milestoneCooldown = 8; // segundos entre mensajes de hito
+  spawnMessage(pickWeighted(MILESTONE_CHOICES));
 }
 
 export function spawnMessage(text?: string) {
   const msg: Msg = {
-    text: text || CHOICES[(Math.random() * CHOICES.length) | 0],
+    text: text || pickWeighted(CHOICES),
     x: VW * (0.35 + Math.random() * 0.3),
     y: VH * (0.25 + Math.random() * 0.25),
     t: 0,
@@ -64,16 +106,7 @@ export function spawnMessage(text?: string) {
     alive: true,
   };
   ACTIVE.push(msg);
-}
-
-export function updateMessages(dt: number) {
-  for (let i = ACTIVE.length - 1; i >= 0; i--) {
-    const m = ACTIVE[i];
-    if (!m.alive) { ACTIVE.splice(i, 1); continue; }
-    m.t += dt;
-    m.y += m.vy * dt;
-    if (m.t >= m.life) { m.alive = false; ACTIVE.splice(i, 1); }
-  }
+  remember(msg.text);
 }
 
 export function drawMessages(ctx: CanvasRenderingContext2D) {
@@ -94,4 +127,28 @@ export function drawMessages(ctx: CanvasRenderingContext2D) {
     ctx.fillText(m.text, 0, 0);
     ctx.restore();
   }
+}
+
+// utilidades
+
+function randGap(min: number, max: number) {
+  return min + Math.random() * (max - min);
+}
+
+function remember(text: string) {
+  recent.push(text);
+  if (recent.length > RECENT_SIZE) recent.shift();
+}
+
+function pickWeighted(pool: Phrase[]): string {
+  // evita repetir de los últimos RECENT_SIZE cuando sea posible
+  const filtered = pool.filter(p => !recent.includes(p.text));
+  const list = filtered.length > 0 ? filtered : pool;
+  const total = list.reduce((s, p) => s + (p.weight > 0 ? p.weight : 1), 0);
+  let r = Math.random() * total;
+  for (const p of list) {
+    const w = p.weight > 0 ? p.weight : 1;
+    if ((r -= w) <= 0) return p.text;
+  }
+  return list[list.length - 1].text;
 }

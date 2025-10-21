@@ -16,7 +16,7 @@ import {
 } from '../game/obstacles';
 import { getClick } from '../engine/input';
 import { drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
-import { updateMessages, drawMessages, resetMessages, maybeSpawnAuto, spawnMessage } from '../fx/messages';
+import { updateMessages, drawMessages, resetMessages, maybeSpawnAuto, spawnMilestoneMessage } from '../fx/messages';
 import { audioInit, startMusic, stopMusic, setMusic, setSfx, playSfx } from '../fx/audio';
 
 let running = false;
@@ -40,7 +40,7 @@ const settings = {
 setSfx(settings.fx);
 setMusic(settings.music);
 
-let nextMilestone = 50;
+let nextMilestone = 100;
 
 function saveSettings() {
   localStorage.setItem('br_vibe', settings.vibe ? '1' : '0');
@@ -60,7 +60,7 @@ function resetRun() {
 const goPlay = () => {
   resetRun();
   resetMessages();
-  nextMilestone = 50;
+  nextMilestone = 100;
   if (settings.music) startMusic();
   setState('playing');
 };
@@ -298,17 +298,20 @@ function loop(now: number) {
   }
 
   const st = getState();
+  if (st === 'gameover') {
+    nextMilestone = 100;
+  }
   if (st === 'playing') {
     updatePlayer(player, dt);
     ensureKickstart(obs);
     updateObstacles(obs, dt);
-    maybeSpawnAuto(dt);
+    maybeSpawnAuto();
 
     const sc = getScore(obs);
     if (sc >= nextMilestone) {
-      spawnMessage('¡Subidón!');
+      spawnMilestoneMessage();
       playSfx('level');
-      nextMilestone += 50;
+      nextMilestone += 100;
     }
 
     for (const idx of obs.active) {
