@@ -1,6 +1,5 @@
 import { VW, VH } from '../engine/viewport';
 
-const POOL_SIZE = 64;
 const LANES = 5;
 
 export interface Ob {
@@ -29,13 +28,14 @@ export interface ObSystem {
 
 export function createObSystem(): ObSystem {
   const best = Number(localStorage.getItem('br_best') || '0') || 0;
+  const pool = Array.from({ length: 64 }, () => ({
+    x: 0, y: -100, r: 12, vy: 120,
+    alive: false, scored: false,
+    lane: -1, spawnTime: -1,
+    scoreValue: 10, big: false,
+  }));
   return {
-    pool: Array.from({ length: POOL_SIZE }, () => ({
-      x: 0, y: -100, r: 12, vy: 120,
-      alive: false, scored: false,
-      lane: -1, spawnTime: -1,
-      scoreValue: 10, big: false
-    })),
+    pool,
     active: [],
     tSpawn: 0,
     spawnEvery: 0.9,
@@ -49,6 +49,7 @@ export function createObSystem(): ObSystem {
 }
 
 function alloc(sys: ObSystem): Ob | null {
+  // iterate over the current pool length
   for (let i = 0; i < sys.pool.length; i++) {
     const o = sys.pool[i];
     if (!o.alive) {
@@ -150,7 +151,7 @@ function spawn(sys: ObSystem) {
     vy, lane: chosenLane,
     spawnTime: sys.elapsed,
     scoreValue: isBig ? 30 : 10,
-    big: isBig
+    big: isBig,
   });
 
   sys.kicked = true;
@@ -209,7 +210,6 @@ export function drawObstacles(ctx: CanvasRenderingContext2D, sys: ObSystem) {
     ctx.fillStyle = '#041a28';
     ctx.fill();
     ctx.globalAlpha = 1;
-
     const g = ctx.createRadialGradient(
       o.x - o.r * 0.35, o.y - o.r * 0.35, o.r * 0.1,
       o.x,               o.y,              o.r
@@ -221,7 +221,6 @@ export function drawObstacles(ctx: CanvasRenderingContext2D, sys: ObSystem) {
     ctx.beginPath();
     ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 0.9;
     ctx.beginPath();
