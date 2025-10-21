@@ -12,9 +12,12 @@ import {
   ensureKickstart,
   getScore,
   getBest,
+  getWave,
 } from '../game/obstacles';
 import { getClick } from '../engine/input';
 import { drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
+import { updateMessages, drawMessages, resetMessages, maybeSpawnAuto, spawnMessage } from '../fx/messages';
+import { audioInit, startMusic, stopMusic, setMusic, setSfx, playSfx } from '../fx/audio';
 
 let running = false;
 let raf = 0;
@@ -25,16 +28,27 @@ let ctx!: CanvasRenderingContext2D;
 const player = createPlayer();
 const obs = createObSystem();
 
+audioInit({ music: true, sfx: true });
+
 const settings = {
   vibe: localStorage.getItem('br_vibe') === '1',
   fx: localStorage.getItem('br_fx') !== '0',
   low: localStorage.getItem('br_lowpower') === '1',
+  music: localStorage.getItem('br_music') !== '0',
 };
+
+setSfx(settings.fx);
+setMusic(settings.music);
+
+let nextMilestone = 50;
 
 function saveSettings() {
   localStorage.setItem('br_vibe', settings.vibe ? '1' : '0');
   localStorage.setItem('br_fx', settings.fx ? '1' : '0');
   localStorage.setItem('br_lowpower', settings.low ? '1' : '0');
+  localStorage.setItem('br_music', settings.music ? '1' : '0');
+  setSfx(settings.fx);
+  setMusic(settings.music);
 }
 
 function resetRun() {
@@ -42,6 +56,16 @@ function resetRun() {
   player.y = VH * 0.8;
   resetObstacles(obs);
 }
+
+const goPlay = () => {
+  resetRun();
+  resetMessages();
+  nextMilestone = 50;
+  if (settings.music) {
+    void startMusic();
+  }
+  setState('playing');
+};
 
 export function bootGame(c: HTMLCanvasElement) {
   canvas = c;
@@ -67,10 +91,7 @@ export function bootGame(c: HTMLCanvasElement) {
     h: BTN_H,
     label: 'Start',
     visible: () => getState() === 'menu',
-    onClick: () => {
-      resetRun();
-      setState('playing');
-    },
+    onClick: () => goPlay(),
   });
   registerButton({
     id: 'settings',
@@ -92,7 +113,10 @@ export function bootGame(c: HTMLCanvasElement) {
     h: 32,
     label: 'II',
     visible: () => getState() === 'playing',
-    onClick: () => setState('pause'),
+    onClick: () => {
+      stopMusic();
+      setState('pause');
+    },
   });
 
   // PAUSE
@@ -104,7 +128,12 @@ export function bootGame(c: HTMLCanvasElement) {
     h: BTN_H,
     label: 'Resume',
     visible: () => getState() === 'pause',
-    onClick: () => setState('playing'),
+    onClick: () => {
+      if (settings.music) {
+        void startMusic();
+      }
+      setState('playing');
+    },
   });
   registerButton({
     id: 'restart',
@@ -114,10 +143,7 @@ export function bootGame(c: HTMLCanvasElement) {
     h: BTN_H,
     label: 'Restart',
     visible: () => getState() === 'pause',
-    onClick: () => {
-      resetRun();
-      setState('playing');
-    },
+    onClick: () => goPlay(),
   });
   registerButton({
     id: 'menu',
@@ -127,7 +153,11 @@ export function bootGame(c: HTMLCanvasElement) {
     h: BTN_H,
     label: 'Menu',
     visible: () => getState() === 'pause',
-    onClick: () => setState('menu'),
+    onClick: () => {
+      stopMusic();
+      resetMessages();
+      setState('menu');
+    },
   });
 
   // GAME OVER: Retry, Share, Menu (solo UNO)
@@ -139,10 +169,7 @@ export function bootGame(c: HTMLCanvasElement) {
     h: BTN_H,
     label: 'Retry',
     visible: () => getState() === 'gameover',
-    onClick: () => {
-      resetRun();
-      setState('playing');
-    },
+    onClick: () => goPlay(),
   });
   registerButton({
     id: 'share',
@@ -162,7 +189,11 @@ export function bootGame(c: HTMLCanvasElement) {
     h: BTN_H,
     label: 'Menu',
     visible: () => getState() === 'gameover',
-    onClick: () => setState('menu'),
+    onClick: () => {
+      stopMusic();
+      resetMessages();
+      setState('menu');
+    },
   });
 
   // SETTINGS
@@ -206,9 +237,29 @@ export function bootGame(c: HTMLCanvasElement) {
     },
   });
   registerButton({
+    id: 'tog-music',
+    x: centerX - 90,
+    y: centerY + 80,
+    w: 180,
+    h: 40,
+    label: () => `Music: ${settings.music ? 'ON' : 'OFF'}`,
+    visible: () => getState() === 'settings',
+    onClick: () => {
+      settings.music = !settings.music;
+      saveSettings();
+      if (settings.music) {
+        if (getState() === 'playing') {
+          void startMusic();
+        }
+      } else {
+        stopMusic();
+      }
+    },
+  });
+  registerButton({
     id: 'back',
     x: centerX - 70,
-    y: centerY + 90,
+    y: centerY + 140,
     w: 140,
     h: 40,
     label: 'Back',
@@ -253,6 +304,14 @@ function loop(now: number) {
     updatePlayer(player, dt);
     ensureKickstart(obs);
     updateObstacles(obs, dt);
+    maybeSpawnAuto(dt);
+
+    const sc = getScore(obs);
+    if (sc >= nextMilestone) {
+      spawnMessage('¡Subidón!');
+      playSfx('level');
+      nextMilestone += 50;
+    }
 
     for (const idx of obs.active) {
       const o = obs.pool[idx];
@@ -266,6 +325,7 @@ function loop(now: number) {
             /* ignore */
           }
         }
+        stopMusic();
         setState('gameover');
         break;
       }
@@ -289,8 +349,10 @@ function render(dt: number) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   applyRenderTransform(ctx, layout);
 
-  ctx.fillStyle = '#0b1f33';
-  ctx.fillRect(0, 0, VW, VH);
+  const wave = getWave(obs);
+  drawReactiveBackground(ctx, wave);
+
+  updateMessages(dt);
 
   const st = getState();
   if (st === 'menu') {
@@ -333,8 +395,32 @@ function render(dt: number) {
     }
   }
 
+  drawMessages(ctx);
   drawUI(ctx);
   drawDebugHUD(ctx, dt, layout, canvas);
+}
+
+function drawReactiveBackground(ctx: CanvasRenderingContext2D, intensity: number) {
+  const t = Math.max(0, Math.min(1, intensity));
+  const from = { r: 7, g: 26, b: 42 };
+  const to = { r: 32, g: 10, b: 34 };
+  const r = Math.round(from.r + (to.r - from.r) * t);
+  const g = Math.round(from.g + (to.g - from.g) * t);
+  const b = Math.round(from.b + (to.b - from.b) * t);
+  const cx = VW * 0.5;
+  const cy = VH * 0.45;
+  const grd = ctx.createRadialGradient(
+    cx,
+    cy,
+    Math.min(VW, VH) * 0.1,
+    cx,
+    cy,
+    Math.max(VW, VH),
+  );
+  grd.addColorStop(0, `rgb(${r + 10}, ${g + 10}, ${b + 10})`);
+  grd.addColorStop(1, `rgb(${r}, ${g}, ${b})`);
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, VW, VH);
 }
 
 function shareScoreSmart() {
