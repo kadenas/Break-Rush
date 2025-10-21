@@ -1,6 +1,6 @@
 import { AUDIO } from '../audio/names';
-import * as AudioMgr from '../audio/audioManager';
 import type { MusicHandle } from '../audio/audioManager';
+import { getContext, playMusic, playSfx, stopMusic, unlock } from '../audio/audioManager';
 
 type TrackName = 'level';
 
@@ -19,7 +19,7 @@ export function audioInit(opts?: { music?: boolean; sfx?: boolean }) {
 }
 
 export function unlockAudio() {
-  return AudioMgr.unlock();
+  return unlock();
 }
 
 export function setMusic(on: boolean) {
@@ -61,7 +61,7 @@ export function onHit() {
   if (!sfxEnabled) {
     return;
   }
-  void AudioMgr.playSfx(AUDIO.HIT, { vol: 1 }).then((ok) => {
+  void playSfx(AUDIO.HIT, { vol: 1 }).then((ok) => {
     if (!ok) {
       synthCrash();
     }
@@ -80,7 +80,7 @@ export function playSfx(name: TrackName) {
     return;
   }
   if (name === 'level') {
-    void AudioMgr.playSfx(AUDIO.LEVEL, { vol: 0.9 }).then((ok) => {
+    void playSfx(AUDIO.LEVEL, { vol: 0.9 }).then((ok) => {
       if (!ok) {
         synthPing();
       }
@@ -90,7 +90,7 @@ export function playSfx(name: TrackName) {
 
 function startTrack(name: string, fadeIn: number) {
   stopCurrentMusic(MUSIC_FADE_OUT);
-  const handle = AudioMgr.playMusic(name, { loop: true, fadeIn });
+  const handle = playMusic(name, { loop: true, fadeIn });
   if (handle) {
     currentHandle = handle;
   } else {
@@ -100,13 +100,13 @@ function startTrack(name: string, fadeIn: number) {
 
 function stopCurrentMusic(fadeOut: number) {
   if (currentHandle) {
-    AudioMgr.stopMusic(currentHandle, { fadeOut });
+    stopMusic(currentHandle, { fadeOut });
   }
   currentHandle = null;
 }
 
 function getCtx() {
-  const ctx = AudioMgr.getContext();
+  const ctx = getContext();
   if (!ctx) {
     return null;
   }
