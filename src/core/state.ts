@@ -1,4 +1,4 @@
-export type GameState = 'menu' | 'playing' | 'pause' | 'gameover';
+export type GameState = 'menu' | 'settings' | 'playing' | 'pause' | 'gameover';
 
 let state: GameState = 'menu';
 
