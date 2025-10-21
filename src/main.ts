@@ -1,5 +1,6 @@
 import { computeLayout } from './engine/viewport';
 import { initInput } from './engine/input';
+import { initControls } from './engine/controls';
 import { bootGame, startGame } from './core/game';
 import { setState } from './core/state';
 import { installGlobalErrorOverlay, errorBanner } from './boot/errorOverlay';
@@ -22,6 +23,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
 
     // Arranque del juego SIEMPRE
     initInput(canvas);
+    initControls(canvas);
     bootGame(canvas);
     startGame();
 

@@ -1,4 +1,4 @@
-import { getPointer, isKeyDown } from '../engine/input';
+import { getPointer, isKeyDown } from '../engine/controls';
 import { VW, VH } from '../engine/viewport';
 
 type TrailPoint = { x: number; y: number };
