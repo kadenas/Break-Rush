@@ -167,8 +167,10 @@ export function updateObstacles(sys: ObSystem, dt: number) {
   sys.waveTimer += dt;
 
   sys.waveIntensity = getWaveIntensity(sys);
-  const baseEvery = 0.9;
-  sys.spawnEvery = Math.max(0.35, baseEvery - sys.waveIntensity * 0.25);
+  const w = sys.waveIntensity;
+  const baseSpawn = 0.9;
+  const valleyEase = 0.15 * (1 - w); // respira: separa un poco en el valle
+  sys.spawnEvery = Math.max(0.35, baseSpawn - w * 0.25 + valleyEase);
 
   if (sys.tSpawn >= sys.spawnEvery) {
     sys.tSpawn = 0;
