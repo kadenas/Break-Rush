@@ -23,12 +23,12 @@ import {
   setMusic,
   setSfx,
   playSfx,
-  unlockAudio,
   toIntro as audioToIntro,
   startGame as audioStartGame,
   onHit as audioOnHit,
   onRetry as audioOnRetry,
 } from '../fx/audio';
+import { installGlobalUnlock, unlockThenStart } from '../audio/unlock';
 
 let running = false;
 let raf = 0;
@@ -113,16 +113,27 @@ export function bootGame(c: HTMLCanvasElement) {
   const gate = document.getElementById('gate');
   const btn = document.getElementById('gate-btn');
   let gateFired = false;
-  const fireGate = async () => {
+  const fireGate = () => {
     if (gateFired) return;
     gateFired = true;
-    try { await unlockAudio(); } catch {}
     audioToIntro();
     setState('menu');
     gate?.remove();
   };
-  btn?.addEventListener('pointerdown', () => { void fireGate(); }, { once:true });
-  btn?.addEventListener('click', () => { void fireGate(); }, { once:true });
+  const startFromGesture = () => {
+    void unlockThenStart(fireGate);
+  };
+  if (btn) {
+    btn.addEventListener(
+      'pointerdown',
+      (event) => {
+        event.preventDefault();
+        startFromGesture();
+      },
+      { once: true }
+    );
+  }
+  installGlobalUnlock(fireGate);
 
   clearButtons();
   // constantes de layout UI
