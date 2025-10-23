@@ -4,7 +4,7 @@ import { initControls } from './engine/controls';
 import { bootGame, requestMenuStart, requestMenuSettings } from './core/game';
 import { installGlobalErrorOverlay, errorBanner } from './boot/errorOverlay';
 import { preloadMenuBackground, showMainMenu, hideMainMenu } from './ui/menu';
-import { armAfterScreenChange } from './input/inputGate';
+import { armAfterScreenChange, handOffActivePointerTo } from './input/inputGate';
 import { onStateChange, getState } from './core/state';
 
 const loadMenuBackground = (() => {
@@ -16,24 +16,6 @@ const loadMenuBackground = (() => {
     return promise;
   };
 })();
-
-const menuHandlers = {
-  onStart: () => {
-    hideMainMenu();
-    armAfterScreenChange();
-    requestMenuStart();
-  },
-  onSettings: () => {
-    hideMainMenu();
-    armAfterScreenChange();
-    requestMenuSettings();
-  },
-};
-
-const showMenuOverlay = () => {
-  armAfterScreenChange();
-  showMainMenu(menuHandlers);
-};
 
 function sizeCanvas(c: HTMLCanvasElement){
   const L = computeLayout();
@@ -61,6 +43,25 @@ window.addEventListener('DOMContentLoaded', ()=>{
     initInput(canvas);
     initControls(canvas);
     bootGame(canvas);
+
+    const menuHandlers = {
+      onStart: () => {
+        hideMainMenu();
+        requestMenuStart();
+
+        handOffActivePointerTo(canvas);
+      },
+      onSettings: () => {
+        hideMainMenu();
+        armAfterScreenChange();
+        requestMenuSettings();
+      },
+    };
+
+    const showMenuOverlay = () => {
+      armAfterScreenChange();
+      showMainMenu(menuHandlers);
+    };
 
     const gateBtn = document.getElementById('gate-btn');
     gateBtn?.addEventListener('click', async () => {

@@ -4,6 +4,10 @@
 
 let armed = false;
 
+// Seguimiento global del puntero actual
+let isPointerDown = false;
+let lastPointerDown: PointerEvent | null = null;
+
 function blockEvent(e: Event) {
   if (!armed) return;
   e.stopImmediatePropagation();
@@ -40,4 +44,43 @@ export function forceUnlockInputGate(): void {
   window.removeEventListener('pointerdown', blockEvent, true);
   window.removeEventListener('click', blockEvent, true);
   window.removeEventListener('pointerup', onPointerUpOnce, true);
+}
+
+// Tracking en capture para enterarse siempre
+(function initPointerTracking() {
+  window.addEventListener('pointerdown', (e) => {
+    isPointerDown = true;
+    lastPointerDown = e;
+  }, { capture: true, passive: false });
+
+  const resetState = () => {
+    isPointerDown = false;
+    lastPointerDown = null;
+  };
+
+  window.addEventListener('pointerup', resetState, { capture: true, passive: false });
+  window.addEventListener('pointercancel', resetState, { capture: true, passive: false });
+})();
+
+// Traspasa el "toque en curso" al elemento objetivo (p.ej. canvas del juego)
+export function handOffActivePointerTo(target: Element): void {
+  if (!isPointerDown || !lastPointerDown) return;
+  const src = lastPointerDown;
+
+  const ev = new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: src.pointerId,
+    pointerType: src.pointerType,
+    isPrimary: src.isPrimary,
+    buttons: src.buttons,
+    pressure: src.pressure,
+    clientX: src.clientX,
+    clientY: src.clientY,
+    screenX: src.screenX,
+    screenY: src.screenY,
+  });
+
+  target.dispatchEvent(ev);
 }
