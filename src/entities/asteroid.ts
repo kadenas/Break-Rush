@@ -1,5 +1,7 @@
 import { getGameBounds } from '../game/bounds';
 
+export type AsteroidSize = 'small' | 'medium' | 'large';
+
 export type AsteroidSpawnOpts = {
   x?: number;
   y?: number;
@@ -8,6 +10,7 @@ export type AsteroidSpawnOpts = {
   speedMul?: number;
   radius?: number;
   big?: boolean;
+  size?: AsteroidSize;
 };
 
 export type Asteroid = {
@@ -22,6 +25,18 @@ export type Asteroid = {
 const BASE_SPEED_MIN = 140;
 const BASE_SPEED_MAX = 220;
 
+function radiusFromSize(size: AsteroidSize): number {
+  switch (size) {
+    case 'small':
+      return Math.floor(randomBetween(8, 12));
+    case 'large':
+      return Math.floor(randomBetween(20, 26));
+    case 'medium':
+    default:
+      return Math.floor(randomBetween(13, 19));
+  }
+}
+
 function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
@@ -34,7 +49,12 @@ export function createAsteroid(opts: AsteroidSpawnOpts = {}): Asteroid {
   const sizeFactor = opts.big ? 0.75 : 1;
   const speed = Math.round(baseSpeed * mul * sizeFactor);
 
-  const radius = opts.radius ?? randomBetween(10, 18);
+  const radius =
+    typeof opts.radius === 'number'
+      ? opts.radius
+      : opts.size
+      ? radiusFromSize(opts.size)
+      : randomBetween(10, 18);
 
   const x = opts.x ?? left + randomBetween(0, width);
   const y = opts.y ?? top - radius;
