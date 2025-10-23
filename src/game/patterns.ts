@@ -16,9 +16,12 @@ export type PatternRunner = {
   update(dt: number): boolean;
 };
 
-export function spawnWallPattern(
-  ctx: PatternContext,
-): PatternRunner & { gapX0: number; gapX1: number } {
+export function spawnWallPattern(ctx: PatternContext): PatternRunner & {
+  gapX0: number;
+  gapX1: number;
+  gapVy: number;
+  gapHeightPx: number;
+} {
   const { width } = getGameBounds();
 
   const playerW = Math.max(24, Math.floor(ctx.playerWidthPx ?? 36));
@@ -47,12 +50,28 @@ export function spawnWallPattern(
   const startY = -30;
   const vy = 220 * (ctx.speedMul || 1);
 
+  const corridorHeight = Math.max(120, Math.floor(playerW * 3.2));
+
   for (let c = 0; c < cols; c++) {
     if (c >= gapStartCol && c < gapStartCol + gapWidthCols) continue;
+
     const xCenter = c * colW + colW * 0.5;
 
-    const rMax = Math.floor(Math.min(colW * 0.42, 22));
-    const r = Math.max(9, rMax);
+    let r = Math.floor(Math.min(colW * 0.38, 22));
+    r = Math.max(r, 9);
+
+    const isLeftEdge = c === gapStartCol - 1;
+    const isRightEdge = c === gapStartCol + gapWidthCols;
+
+    if (isLeftEdge) {
+      const distToGapEdge = (c + 1) * colW - xCenter;
+      const maxR = Math.floor(distToGapEdge - safety);
+      r = Math.max(9, Math.min(r, maxR));
+    } else if (isRightEdge) {
+      const distToGapEdge = xCenter - c * colW;
+      const maxR = Math.floor(distToGapEdge - safety);
+      r = Math.max(9, Math.min(r, maxR));
+    }
 
     const safeX = clamp(xCenter, r, width - r);
 
@@ -71,6 +90,8 @@ export function spawnWallPattern(
     update: () => true,
     gapX0,
     gapX1,
+    gapVy: vy,
+    gapHeightPx: corridorHeight,
   };
 }
 
