@@ -1,5 +1,11 @@
 import { getState, setState } from './state';
-import { createPlayer, updatePlayer, drawPlayer, isShieldActive, consumeShield } from '../game/player';
+import {
+  createPlayer,
+  updatePlayer,
+  drawPlayer,
+  isShieldActive,
+  consumeShield,
+} from '../game/player';
 import { applyRenderTransform, computeLayout, VW, VH } from '../engine/viewport';
 import { drawDebugHUD } from '../engine/debug';
 import {
@@ -31,6 +37,7 @@ import {
 } from '../fx/audio';
 import { unlockSync } from '../audio/audioManager';
 import { shareScore } from '../share';
+import { setFeedbackVibration, triggerHitFeedback, updateFeedback } from '../fx/feedback';
 
 let started = false;
 function startGameSafe() {
@@ -57,6 +64,7 @@ const settings = {
 
 setSfx(settings.fx);
 setMusic(settings.music);
+setFeedbackVibration(settings.vibe);
 
 let nextMilestone = 100;
 let aliveTime = 0;
@@ -83,6 +91,7 @@ function saveSettings() {
   localStorage.setItem('br_music', settings.music ? '1' : '0');
   setSfx(settings.fx);
   setMusic(settings.music);
+  setFeedbackVibration(settings.vibe);
 }
 
 function resetRun() {
@@ -463,19 +472,14 @@ function loop(now: number) {
           consumeShield(player);
           o.alive = false;
           flashes.push({ t: 0, life: 0.25, x: player.x, y: player.y, r: 70 });
+          triggerHitFeedback(player);
           continue;
         }
         if (started) {
           audioOnHit();
         }
         commitBest(obs);
-        if (settings.vibe && 'vibrate' in navigator) {
-          try {
-            (navigator as any).vibrate(50);
-          } catch {
-            /* ignore */
-          }
-        }
+        triggerHitFeedback(player);
         const earned = Math.floor(sc / 50);
         totalRank += earned;
         localStorage.setItem('br_rank', String(totalRank));
@@ -484,6 +488,8 @@ function loop(now: number) {
       }
     }
   }
+
+  updateFeedback(dt, canvas);
 
   render(dt);
   raf = requestAnimationFrame(loop);

@@ -3,6 +3,7 @@ import { getGameBounds } from './bounds';
 import { applySpeedModifier, gameDifficulty, getGlobalSpeedMul, getSpeedModifier } from './spawner';
 import { playMessage } from '../fx/messages';
 import { activateShield, Player } from './player';
+import { triggerBonusFeedback } from '../fx/feedback';
 
 const ACTIVE_BONUSES: Bonus[] = [];
 let spawnTimer = 0;
@@ -77,6 +78,7 @@ function triggerBonusEffect(bonus: Bonus, player: Player, addScore: (amount: num
       playMessage('¡Tiempo lento!');
       break;
   }
+  triggerBonusFeedback(player);
 }
 
 export function renderBonuses(ctx: CanvasRenderingContext2D): void {

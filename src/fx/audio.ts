@@ -17,6 +17,12 @@ let currentHandle: MusicHandle | null = null;
 let desiredState: MusicState = 'idle';
 let activeState: MusicState = 'idle';
 
+const MUSIC_TEMPO_MIN = 0.5;
+const MUSIC_TEMPO_MAX = 1.8;
+
+let musicTempo = 1;
+let musicVolume = 0.8;
+
 export function audioInit(opts?: { music?: boolean; sfx?: boolean }) {
   musicEnabled = opts?.music ?? musicEnabled;
   sfxEnabled = opts?.sfx ?? sfxEnabled;
@@ -33,6 +39,38 @@ export function setMusic(on: boolean) {
     return;
   }
   applyMusicState(desiredState);
+}
+
+export function setMusicTempo(rate: number) {
+  const clamped = Math.min(MUSIC_TEMPO_MAX, Math.max(MUSIC_TEMPO_MIN, rate));
+  musicTempo = Number.isFinite(clamped) ? clamped : musicTempo;
+  const handle = currentHandle;
+  const source = handle?.source;
+  if (handle && source) {
+    const { context } = handle;
+    try {
+      source.playbackRate.cancelScheduledValues?.(context.currentTime);
+      source.playbackRate.setTargetAtTime(musicTempo, context.currentTime, 0.08);
+    } catch {
+      source.playbackRate.value = musicTempo;
+    }
+  }
+}
+
+export function setMusicVolume(volume: number) {
+  const clamped = Math.min(1, Math.max(0, volume));
+  musicVolume = Number.isFinite(clamped) ? clamped : musicVolume;
+  const handle = currentHandle;
+  const gain = handle?.gain;
+  if (handle && gain) {
+    const { context } = handle;
+    try {
+      gain.gain.cancelScheduledValues?.(context.currentTime);
+      gain.gain.setTargetAtTime(musicVolume, context.currentTime, 0.1);
+    } catch {
+      gain.gain.value = musicVolume;
+    }
+  }
 }
 
 export function setSfx(on: boolean) {
@@ -127,11 +165,19 @@ function startTrack(name: string, fadeIn: number, loop: boolean, fadeOutBefore: 
   const handle = playMusic(name, { loop, fadeIn });
   if (handle) {
     currentHandle = handle;
-    handle.ready.then(() => {
-      if (!handle.source && currentHandle === handle) {
-        currentHandle = null;
-      }
-    });
+    handle.ready
+      .then(() => {
+        if (!handle.source && currentHandle === handle) {
+          currentHandle = null;
+          return;
+        }
+        if (currentHandle === handle) {
+          applyMusicParams(handle);
+        }
+      })
+      .catch(() => {
+        /* ignore */
+      });
   } else {
     currentHandle = null;
   }
@@ -148,21 +194,54 @@ function startHitTrack() {
     return;
   }
   currentHandle = handle;
-  handle.ready.then(() => {
-    if (!handle.source && desiredState === 'hit') {
-      currentHandle = null;
-      if (sfxEnabled) {
-        synthCrash();
+  handle.ready
+    .then(() => {
+      if (!handle.source && desiredState === 'hit') {
+        currentHandle = null;
+        if (sfxEnabled) {
+          synthCrash();
+        }
+        transitionMusic('game_over');
+        return;
       }
-      transitionMusic('game_over');
-    }
-  });
+      if (desiredState === 'hit') {
+        applyMusicParams(handle);
+      }
+    })
+    .catch(() => {
+      /* ignore */
+    });
   handle.ended.then(() => {
     if (desiredState === 'hit') {
       currentHandle = null;
       transitionMusic('game_over');
     }
   });
+}
+
+function applyMusicParams(handle: MusicHandle) {
+  const { context } = handle;
+  const now = context.currentTime;
+  const source = handle.source;
+  if (source) {
+    try {
+      source.playbackRate.cancelScheduledValues?.(now);
+      source.playbackRate.setTargetAtTime(musicTempo, now, 0.1);
+    } catch {
+      source.playbackRate.value = musicTempo;
+    }
+  }
+  const gain = handle.gain;
+  if (gain) {
+    try {
+      const current = gain.gain.value;
+      gain.gain.cancelScheduledValues?.(now);
+      gain.gain.setValueAtTime(current, now);
+      gain.gain.linearRampToValueAtTime(musicVolume, now + 0.25);
+    } catch {
+      gain.gain.value = musicVolume;
+    }
+  }
 }
 
 function stopCurrentMusic(fadeOut: number) {

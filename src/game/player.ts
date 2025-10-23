@@ -10,6 +10,9 @@ export interface Player {
   speedMax: number;
   trail: TrailPoint[];
   shieldTimer: number;
+  flashTimer: number;
+  flashDuration: number;
+  flashColor: string;
 }
 
 export function createPlayer(): Player {
@@ -20,6 +23,9 @@ export function createPlayer(): Player {
     speedMax: 220,
     trail: [],
     shieldTimer: 0,
+    flashTimer: 0,
+    flashDuration: 0,
+    flashColor: '#ffffff',
   };
   resetPlayerTrail(player);
   return player;
@@ -66,6 +72,13 @@ export function updatePlayer(p: Player, dt: number) {
   if (p.shieldTimer > 0) {
     p.shieldTimer = Math.max(0, p.shieldTimer - dt);
   }
+
+  if (p.flashTimer > 0) {
+    p.flashTimer = Math.max(0, p.flashTimer - dt);
+    if (p.flashTimer === 0) {
+      p.flashDuration = 0;
+    }
+  }
 }
 
 export function drawTrail(ctx: CanvasRenderingContext2D, p: Player) {
@@ -87,13 +100,18 @@ export function drawTrail(ctx: CanvasRenderingContext2D, p: Player) {
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player) {
+  const flashStrength = p.flashDuration > 0 ? Math.min(1, p.flashTimer / p.flashDuration) : 0;
+  const flashMix = flashStrength > 0 ? Math.pow(flashStrength, 0.45) : 0;
+
   const g = ctx.createRadialGradient(
     p.x - p.r * 0.3, p.y - p.r * 0.3, p.r * 0.1,
     p.x,             p.y,             p.r,
   );
-  g.addColorStop(0, '#baf5ff');
-  g.addColorStop(0.4, '#3fd0e9');
-  g.addColorStop(1, '#178ba4');
+  const mixColor = flashMix > 0 ? p.flashColor : '#baf5ff';
+  const edgeColor = flashMix > 0 ? blendColor('#178ba4', p.flashColor, flashMix * 0.3) : '#178ba4';
+  g.addColorStop(0, blendColor('#baf5ff', mixColor, flashMix * 0.7));
+  g.addColorStop(0.4, blendColor('#3fd0e9', mixColor, flashMix * 0.5));
+  g.addColorStop(1, edgeColor);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -116,6 +134,20 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player) {
     ctx.stroke();
     ctx.restore();
   }
+
+  if (flashStrength > 0) {
+    const progress = 1 - flashStrength;
+    const pulse = 0.5 + 0.5 * Math.sin((p.flashDuration - p.flashTimer) * 24);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = (0.35 + 0.45 * pulse) * flashStrength;
+    ctx.fillStyle = p.flashColor;
+    const radius = p.r + 4 + 6 * (1 - progress);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 const SHIELD_DEFAULT_DURATION = 6;
@@ -130,4 +162,39 @@ export function isShieldActive(p: Player): boolean {
 
 export function consumeShield(p: Player) {
   p.shieldTimer = 0;
+}
+
+function startFlash(p: Player, duration: number, color: string) {
+  p.flashDuration = duration;
+  p.flashTimer = duration;
+  p.flashColor = color;
+}
+
+export function triggerPlayerHitFlash(p: Player) {
+  startFlash(p, 0.35, '#ff3860');
+}
+
+export function triggerPlayerBonusFlash(p: Player) {
+  startFlash(p, 0.4, '#ffe066');
+}
+
+function blendColor(base: string, tint: string, t: number): string {
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const parse = (hex: string) => {
+    const clean = hex.replace('#', '');
+    const bigint = parseInt(clean.length === 3 ? clean.replace(/(.)/g, '$1$1') : clean, 16);
+    return {
+      r: (bigint >> 16) & 255,
+      g: (bigint >> 8) & 255,
+      b: bigint & 255,
+    };
+  };
+  const baseRgb = parse(base);
+  const tintRgb = parse(tint);
+  const mix = {
+    r: clamp(baseRgb.r + (tintRgb.r - baseRgb.r) * t),
+    g: clamp(baseRgb.g + (tintRgb.g - baseRgb.g) * t),
+    b: clamp(baseRgb.b + (tintRgb.b - baseRgb.b) * t),
+  };
+  return `rgb(${mix.r}, ${mix.g}, ${mix.b})`;
 }
