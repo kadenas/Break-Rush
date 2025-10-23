@@ -17,49 +17,62 @@ type SpawnAsteroidCallback = (args: SpawnAsteroidArgs) => void;
 
 const difficulty = new DifficultyManager();
 
-// ========= Gap Reservation =========
-type GapReservation = {
+// ========== Corredor dinámico ==========
+type Corridor = {
   active: boolean;
   x0: number;
   x1: number;
+  yTop: number;
+  height: number;
+  vy: number;
   ttl: number;
-  topBandPx: number;
 };
 
-let gapReservation: GapReservation = {
+let corridor: Corridor = {
   active: false,
   x0: 0,
   x1: 0,
+  yTop: -9999,
+  height: 0,
+  vy: 0,
   ttl: 0,
-  topBandPx: 140,
 };
 
-function reserveGap(x0: number, x1: number, seconds = 1.6) {
-  gapReservation = {
+function startCorridor(
+  x0: number,
+  x1: number,
+  vy: number,
+  height: number,
+  seconds = 1.8,
+) {
+  corridor = {
     active: true,
     x0,
     x1,
+    yTop: -40,
+    height,
+    vy,
     ttl: seconds,
-    topBandPx: 140,
   };
 }
 
-function updateGapReservation(dt: number) {
-  if (!gapReservation.active) return;
-  gapReservation.ttl -= dt;
-  if (gapReservation.ttl <= 0) {
-    gapReservation.active = false;
+function updateCorridor(dt: number) {
+  if (!corridor.active) return;
+  corridor.yTop += corridor.vy * dt;
+  corridor.ttl -= dt;
+  const { height } = getGameBounds();
+  if (corridor.ttl <= 0 || corridor.yTop - 20 > height) {
+    corridor.active = false;
   }
 }
 
-function isXInReservedGap(x: number): boolean {
-  return gapReservation.active && x >= gapReservation.x0 && x <= gapReservation.x1;
+function pointInCorridor(x: number, y: number): boolean {
+  if (!corridor.active) return false;
+  const y0 = corridor.yTop;
+  const y1 = corridor.yTop + corridor.height;
+  return x >= corridor.x0 && x <= corridor.x1 && y >= y0 && y <= y1;
 }
-
-function shouldAvoidTopBand(y: number): boolean {
-  return gapReservation.active && y <= gapReservation.topBandPx;
-}
-// ===================================
+// ======================================
 
 let spawnTimerMs = 0;
 let currentTargetIntervalMs = difficulty.currentSpawnIntervalMs;
@@ -84,25 +97,25 @@ function tryStartPattern(spawnAsteroid: SpawnAsteroidCallback): PatternRunner {
   };
 
   const r = Math.random();
-  let runner: PatternRunner & { gapX0?: number; gapX1?: number };
+  let runner: PatternRunner;
   if (r < 0.5) {
     const res = _spawnWallPattern({
       ...baseCtx,
       playerWidthPx: 36,
-      gapSafetyPx: 10,
+      gapSafetyPx: 12,
       push: (asteroid) => {
         spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
       },
     });
-    reserveGap(res.gapX0, res.gapX1, 1.6);
+    startCorridor(res.gapX0, res.gapX1, res.gapVy, res.gapHeightPx, 1.8);
     runner = res;
   } else if (r < 0.8) {
     runner = spawnDiagonalPattern({
       ...baseCtx,
       push: (asteroid) => {
-        const y0 = asteroid.y ?? -40;
         const x0 = asteroid.x ?? 0;
-        if (shouldAvoidTopBand(y0) && isXInReservedGap(x0)) return;
+        const y0 = asteroid.y ?? -40;
+        if (pointInCorridor(x0, y0)) return;
         spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
       },
     });
@@ -110,9 +123,9 @@ function tryStartPattern(spawnAsteroid: SpawnAsteroidCallback): PatternRunner {
     runner = spawnTwinClampPattern({
       ...baseCtx,
       push: (asteroid) => {
-        const y0 = asteroid.y ?? -30;
         const x0 = asteroid.x ?? 0;
-        if (shouldAvoidTopBand(y0) && isXInReservedGap(x0)) return;
+        const y0 = asteroid.y ?? -30;
+        if (pointInCorridor(x0, y0)) return;
         spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
       },
     });
@@ -131,7 +144,7 @@ export function updateSpawner(
   const dtMs = dt * 1000;
 
   difficulty.update(dt, score);
-  updateGapReservation(dt);
+  updateCorridor(dt);
 
   if (activePattern) {
     const done = activePattern.update(dt);
@@ -160,26 +173,9 @@ export function updateSpawner(
   spawnTimerMs += dtMs;
   while (spawnTimerMs >= currentTargetIntervalMs) {
     spawnTimerMs -= currentTargetIntervalMs;
-
-    const asteroid = createAsteroid({ speedMul: difficulty.currentSpeedMul });
-    const y0 = asteroid.y ?? 0;
-    if (shouldAvoidTopBand(y0) && isXInReservedGap(asteroid.x)) {
-      const { width } = getGameBounds();
-      const leftOk = gapReservation.x0 > 20;
-      const rightOk = gapReservation.x1 < width - 20;
-      if (leftOk || rightOk) {
-        const goLeft = leftOk && (!rightOk || Math.random() < 0.5);
-        const minX = goLeft ? 20 : gapReservation.x1 + 10;
-        const maxX = goLeft ? gapReservation.x0 - 10 : width - 20;
-        if (maxX > minX) {
-          asteroid.x = randRange(minX, maxX);
-          spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
-          continue;
-        }
-      }
+    if (corridor.active) {
       continue;
     }
-
     spawnAsteroid({ speedMul: difficulty.currentSpeedMul });
   }
 }
@@ -190,12 +186,14 @@ export function resetSpawner(): void {
   currentTargetIntervalMs = difficulty.currentSpawnIntervalMs;
   activePattern = null;
   patternCooldown = 0;
-  gapReservation = {
+  corridor = {
     active: false,
     x0: 0,
     x1: 0,
+    yTop: -9999,
+    height: 0,
+    vy: 0,
     ttl: 0,
-    topBandPx: 140,
   };
 }
 
