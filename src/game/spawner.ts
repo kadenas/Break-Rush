@@ -86,8 +86,9 @@ const minPatternCooldown = 3.5;
 const maxPatternCooldown = 7.0;
 
 function rollPatternChance(level: number): number {
-  const p = 0.06 + level * 0.012;
-  return Math.min(0.22, p);
+  // Antes subía demasiado rápido; bajamos el multiplicador.
+  const p = 0.05 + level * 0.008;
+  return Math.min(0.18, p);
 }
 
 function randRange(a: number, b: number) {
