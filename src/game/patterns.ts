@@ -16,7 +16,11 @@ export type PatternRunner = {
   update(dt: number): boolean;
 };
 
-export function spawnWallPattern(ctx: PatternContext): PatternRunner & {
+/**
+ * Muralla con hueco garantizado y SOLO asteroides pequeños.
+ */
+export function spawnWallPattern(ctx: PatternContext): {
+  update: (dt: number) => boolean;
   gapX0: number;
   gapX1: number;
   gapVy: number;
@@ -25,12 +29,13 @@ export function spawnWallPattern(ctx: PatternContext): PatternRunner & {
   const { width } = getGameBounds();
 
   const playerW = Math.max(24, Math.floor(ctx.playerWidthPx ?? 36));
-  const safety = Math.max(6, Math.floor(ctx.gapSafetyPx ?? 10));
+  const safety = Math.max(8, Math.floor(ctx.gapSafetyPx ?? 12));
   const minGapPx = playerW + 2 * safety;
 
   let cols = Math.max(6, Math.round(width / 60));
   let colW = width / cols;
 
+  // Asegurar hueco mínimo en columnas enteras
   let gapCols = Math.ceil(minGapPx / colW);
   while (cols - gapCols < 2 && cols > 4) {
     cols -= 1;
@@ -38,6 +43,7 @@ export function spawnWallPattern(ctx: PatternContext): PatternRunner & {
     gapCols = Math.ceil(minGapPx / colW);
   }
 
+  // Hueco  = gapCols o gapCols+1, sin pasarse
   const gapWidthCols = clamp(
     gapCols + (Math.random() < 0.35 ? 1 : 0),
     gapCols,
@@ -49,30 +55,33 @@ export function spawnWallPattern(ctx: PatternContext): PatternRunner & {
 
   const startY = -30;
   const vy = 220 * (ctx.speedMul || 1);
-
   const corridorHeight = Math.max(120, Math.floor(playerW * 3.2));
 
   for (let c = 0; c < cols; c++) {
     if (c >= gapStartCol && c < gapStartCol + gapWidthCols) continue;
 
-    const xCenter = c * colW + colW * 0.5;
+    const cellX0 = c * colW;
+    const cellX1 = (c + 1) * colW;
+    const xCenter = cellX0 + colW * 0.5;
 
-    let r = Math.floor(Math.min(colW * 0.38, 22));
-    r = Math.max(r, 9);
+    // Forzamos SMALL; luego recortamos radio en bordes si es necesario
+    let r = Math.floor(Math.random() * (12 - 8 + 1)) + 8; // 8..12
 
-    const isLeftEdge = c === gapStartCol - 1;
-    const isRightEdge = c === gapStartCol + gapWidthCols;
+    // Si la celda es adyacente al hueco, recorta radio para respetar margen:
+    const touchingLeft = cellX1 === gapX0; // celda justo a la izquierda del hueco
+    const touchingRight = cellX0 === gapX1; // celda justo a la derecha del hueco
 
-    if (isLeftEdge) {
-      const distToGapEdge = (c + 1) * colW - xCenter;
+    if (touchingLeft) {
+      const distToGapEdge = cellX1 - xCenter;
       const maxR = Math.floor(distToGapEdge - safety);
-      r = Math.max(9, Math.min(r, maxR));
-    } else if (isRightEdge) {
-      const distToGapEdge = xCenter - c * colW;
+      r = Math.max(7, Math.min(r, maxR));
+    } else if (touchingRight) {
+      const distToGapEdge = xCenter - cellX0;
       const maxR = Math.floor(distToGapEdge - safety);
-      r = Math.max(9, Math.min(r, maxR));
+      r = Math.max(7, Math.min(r, maxR));
     }
 
+    // Clamp final a bordes de pantalla
     const safeX = clamp(xCenter, r, width - r);
 
     const opts: AsteroidSpawnOpts = {
@@ -80,8 +89,9 @@ export function spawnWallPattern(ctx: PatternContext): PatternRunner & {
       y: startY,
       vx: 0,
       vy,
-      speedMul: 1,
+      size: 'small',
       radius: r,
+      speedMul: 1,
     };
     ctx.push(createAsteroid(opts));
   }
