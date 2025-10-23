@@ -1,37 +1,42 @@
 const SITE_URL = 'https://hallofgame.gleeze.com';
 
-function buildShareMessage(points: number): string {
-  // Usa saltos de línea. navigator.share respeta \n; enlaces usan %0A.
-  return `Mi puntuación en Break Rush: ${points} pts\nSuperalo, si puedes !!`;
+// Mensaje exacto solicitado
+function buildShareText(points: number): string {
+  return `He conseguido ${points} puntos en Break Rush\nA ver si consigues superarlo!!!\n${SITE_URL}`;
 }
 
+// Guard de reentrada para evitar dobles aperturas por eventos repetidos
+let sharingInProgress = false;
+
 export async function shareScore(points: number) {
-  const message = buildShareMessage(points);
-  const textWithUrl = `${message}\n${SITE_URL}`;
+  if (sharingInProgress) return;
+  sharingInProgress = true;
 
-  // Web Share API (mejor experiencia en móvil)
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: 'Break Rush', text: message, url: SITE_URL });
+  const text = buildShareText(points);
+
+  try {
+    // 1) Web Share API: mejor experiencia móvil. NO pasamos 'url' para no duplicar
+    if (navigator.share) {
+      await navigator.share({ title: 'Break Rush', text });
       return;
-    } catch {
-      // cae al fallback
     }
-  }
 
-  // Fallback: intenta WhatsApp si el usuario lo abre
-  const wa = `https://wa.me/?text=${encodeURIComponent(textWithUrl)}`;
-  const tg = `https://t.me/share/url?url=${encodeURIComponent(SITE_URL)}&text=${encodeURIComponent(message)}`;
+    // 2) Fallback ÚNICO: WhatsApp web/app con solo el texto (incluye la URL en el propio texto)
+    const wa = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    const popup = window.open(wa, '_blank', 'noopener,noreferrer');
 
-  // intenta abrir WhatsApp, si bloquea popups, deja el texto copiado
-  const w = window.open(wa, '_blank');
-  if (!w) {
-    try {
-      await navigator.clipboard.writeText(textWithUrl);
-      alert('Texto de puntuación copiado. Pégalo en tu app de mensajería.');
-    } catch {
-      // último fallback: abre Telegram
-      window.open(tg, '_blank');
+    if (!popup) {
+      // 3) Si bloquea popups, copiamos al portapapeles y avisamos. No abrimos nada más.
+      try {
+        await navigator.clipboard.writeText(text);
+        alert('Puntuación copiada al portapapeles. Pega el mensaje en tu app de mensajería.');
+      } catch {
+        // Último recurso: muestra un prompt para copiar manualmente
+        prompt('Copia tu puntuación y compártela:', text);
+      }
     }
+  } finally {
+    // pequeño retardo por si el navegador tarda en evaluar el popup blocker
+    setTimeout(() => { sharingInProgress = false; }, 600);
   }
 }

@@ -1,5 +1,6 @@
 import '../styles/gameover.css';
 import { shareScore } from '../share';
+import { armAfterScreenChange } from '../input/inputGate';
 
 type GameOverHandlers = {
   onRetry: () => void;
@@ -8,6 +9,7 @@ type GameOverHandlers = {
 
 let root: HTMLDivElement | null = null;
 let elScore: HTMLElement | null = null;
+let btnShare: HTMLButtonElement | null = null;
 
 export function ensureGameOverDOM(h: GameOverHandlers) {
   if (root) return;
@@ -33,20 +35,35 @@ export function ensureGameOverDOM(h: GameOverHandlers) {
   elScore = document.getElementById('go-stats');
 
   const retry = document.getElementById('go-retry') as HTMLButtonElement;
-  const share = document.getElementById('go-share') as HTMLButtonElement;
+  btnShare = document.getElementById('go-share') as HTMLButtonElement;
   const menu  = document.getElementById('go-menu')  as HTMLButtonElement;
 
   retry.addEventListener('click', h.onRetry);
   menu.addEventListener('click', h.onMenu);
-  share.addEventListener('click', () => {
+
+  // Handler de Share con “debounce” y deshabilitado temporal
+  btnShare.addEventListener('click', async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!btnShare || btnShare.disabled) return;
+
+    btnShare.disabled = true;
     const pts = parseInt(elScore?.dataset.points ?? '0', 10) || 0;
-    shareScore(pts);
+    try {
+      await shareScore(pts);
+    } finally {
+      // reactivamos tras un breve colchón para evitar dobles aperturas
+      setTimeout(() => { if (btnShare) btnShare.disabled = false; }, 800);
+    }
   });
 }
 
 export function showGameOver(points: number, rankText: string) {
   if (!root) return;
-  // Rellenar texto y guardar puntos para Share
+
+  // Armamos el gate ANTES de abrir la pantalla para obligar a levantar el dedo
+  armAfterScreenChange();
+
   if (elScore) {
     elScore.innerHTML = `
       <div><strong>Puntuación:</strong> ${points} pts</div>
