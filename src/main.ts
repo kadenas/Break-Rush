@@ -4,6 +4,7 @@ import { initControls } from './engine/controls';
 import { bootGame, requestMenuStart, requestMenuSettings } from './core/game';
 import { installGlobalErrorOverlay, errorBanner } from './boot/errorOverlay';
 import { preloadMenuBackground, showMainMenu, hideMainMenu } from './ui/menu';
+import { armAfterScreenChange } from './input/inputGate';
 import { onStateChange, getState } from './core/state';
 
 const loadMenuBackground = (() => {
@@ -19,15 +20,18 @@ const loadMenuBackground = (() => {
 const menuHandlers = {
   onStart: () => {
     hideMainMenu();
+    armAfterScreenChange();
     requestMenuStart();
   },
   onSettings: () => {
     hideMainMenu();
+    armAfterScreenChange();
     requestMenuSettings();
   },
 };
 
 const showMenuOverlay = () => {
+  armAfterScreenChange();
   showMainMenu(menuHandlers);
 };
 
@@ -62,6 +66,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
     gateBtn?.addEventListener('click', async () => {
       await loadMenuBackground();
       if (getState() === 'menu') {
+        armAfterScreenChange();
         showMenuOverlay();
       }
     });
@@ -70,6 +75,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
       if (state === 'menu') {
         loadMenuBackground().then(() => {
           if (getState() === 'menu') {
+            armAfterScreenChange();
             showMenuOverlay();
           }
         });

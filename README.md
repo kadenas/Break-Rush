@@ -22,6 +22,9 @@ The dev server launches at [http://localhost:5173](http://localhost:5173) with h
 
 > **Menu background**: the start screen expects `public/images/start.png`. The repository ships an empty `.gitkeep`; copy the real PNG into that path during deployment.
 
+### Anti-taps fantasma en cambios de pantalla
+Se añade `src/input/inputGate.ts`. Tras cada transición de pantalla se llama a `armAfterScreenChange()`, que bloquea `pointerdown/click` hasta que ocurre el primer `pointerup`. Así evitamos que un toque sostenido active botones de la nueva pantalla.
+
 ### Linting
 
 ```bash
