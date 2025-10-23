@@ -7,6 +7,7 @@ import { preloadMenuBackground, showMainMenu, hideMainMenu } from './ui/menu';
 import { armAfterScreenChange, handOffActivePointerTo } from './input/inputGate';
 import { onStateChange, getState } from './core/state';
 import { ensureGameOverDOM, showGameOver, hideGameOver } from './ui/gameOver';
+import { gameDifficulty } from './game/spawner';
 
 const loadMenuBackground = (() => {
   let promise: Promise<void> | null = null;
@@ -35,6 +36,9 @@ if (typeof window !== 'undefined') {
 window.addEventListener('DOMContentLoaded', ()=>{
   try{
     installGlobalErrorOverlay();
+    if (import.meta.env.DEV) {
+      (window as any).gameDifficulty = gameDifficulty;
+    }
     const canvas = qs<HTMLCanvasElement>('#game');
     sizeCanvas(canvas);
     window.addEventListener('resize', ()=>sizeCanvas(canvas));

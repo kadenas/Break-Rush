@@ -1,4 +1,11 @@
 import { VW, VH } from '../engine/viewport';
+import { createAsteroid } from '../entities/asteroid';
+import {
+  updateSpawner,
+  resetSpawner,
+  notifySpawn,
+  gameDifficulty,
+} from './spawner';
 
 const LANES = 5;
 
@@ -16,14 +23,12 @@ export interface Ob {
 export interface ObSystem {
   pool: Ob[];
   active: number[];
-  tSpawn: number;
-  spawnEvery: number;
   elapsed: number;
   score: number;
   best: number;
   kicked: boolean;
-  waveTimer: number;
   waveIntensity: number;
+  spawnIntervalSec: number;
 }
 
 export function createObSystem(): ObSystem {
@@ -34,17 +39,16 @@ export function createObSystem(): ObSystem {
     lane: -1, spawnTime: -1,
     scoreValue: 10, big: false,
   }));
+  resetSpawner();
   return {
     pool,
     active: [],
-    tSpawn: 0,
-    spawnEvery: 0.9,
     elapsed: 0,
     score: 0,
     best,
     kicked: false,
-    waveTimer: 0,
     waveIntensity: 0,
+    spawnIntervalSec: gameDifficulty.currentSpawnIntervalMs / 1000,
   };
 }
 
@@ -69,13 +73,12 @@ function alloc(sys: ObSystem): Ob | null {
 export function resetObstacles(sys: ObSystem) {
   for (const i of sys.active) sys.pool[i].alive = false;
   sys.active.length = 0;
-  sys.tSpawn = 0;
-  sys.spawnEvery = 0.9;
   sys.elapsed = 0;
   sys.score = 0;
   sys.kicked = false;
-  sys.waveTimer = 0;
   sys.waveIntensity = 0;
+  resetSpawner();
+  sys.spawnIntervalSec = gameDifficulty.currentSpawnIntervalMs / 1000;
 }
 
 function shuffleLanes(): number[] {
@@ -85,21 +88,6 @@ function shuffleLanes(): number[] {
     [order[i], order[j]] = [order[j], order[i]];
   }
   return order;
-}
-
-function easeOutCubic(t: number) {
-  const u = 1 - Math.min(Math.max(t, 0), 1);
-  return 1 - u * u * u;
-}
-
-function getWaveIntensity(sys: ObSystem) {
-  const WAVE_LENGTH = 15;
-  const COOL_LENGTH = 5;
-  const TOTAL = WAVE_LENGTH + COOL_LENGTH;
-  const t = sys.waveTimer % TOTAL;
-  if (t < WAVE_LENGTH) return t / WAVE_LENGTH;
-  const coolT = (t - WAVE_LENGTH) / COOL_LENGTH;
-  return 1 - easeOutCubic(coolT) * 0.4;
 }
 
 function canSpawnInLane(sys: ObSystem, lane: number, spawnY: number): boolean {
@@ -113,7 +101,7 @@ function canSpawnInLane(sys: ObSystem, lane: number, spawnY: number): boolean {
   return true;
 }
 
-function spawn(sys: ObSystem) {
+function spawn(sys: ObSystem, speedMul: number) {
   const o = alloc(sys);
   if (!o) return;
 
@@ -142,9 +130,8 @@ function spawn(sys: ObSystem) {
     return;
   }
 
-  const baseSpeed = 140;
-  const speedBonus = sys.waveIntensity * 120;
-  const vy = (baseSpeed + speedBonus) * (isBig ? 0.75 : 1);
+  const asteroid = createAsteroid({ speedMul, big: isBig });
+  const vy = asteroid.vy;
 
   Object.assign(o, {
     x: spawnX, y: spawnY, r,
@@ -158,24 +145,20 @@ function spawn(sys: ObSystem) {
 }
 
 export function ensureKickstart(sys: ObSystem) {
-  if (!sys.kicked && sys.elapsed > 0.4) spawn(sys);
+  if (!sys.kicked && sys.elapsed > 0.4) {
+    spawn(sys, gameDifficulty.currentSpeedMul);
+    notifySpawn();
+  }
 }
 
 export function updateObstacles(sys: ObSystem, dt: number) {
   sys.elapsed += dt;
-  sys.tSpawn += dt;
-  sys.waveTimer += dt;
-
-  sys.waveIntensity = getWaveIntensity(sys);
-  const w = sys.waveIntensity;
-  const baseSpawn = 0.9;
-  const valleyEase = 0.15 * (1 - w); // respira: separa un poco en el valle
-  sys.spawnEvery = Math.max(0.35, baseSpawn - w * 0.25 + valleyEase);
-
-  if (sys.tSpawn >= sys.spawnEvery) {
-    sys.tSpawn = 0;
-    spawn(sys);
-  }
+  const scoreInt = Math.floor(sys.score);
+  updateSpawner(dt, scoreInt, ({ speedMul }) => {
+    spawn(sys, speedMul);
+  });
+  sys.waveIntensity = gameDifficulty.waveIntensity;
+  sys.spawnIntervalSec = gameDifficulty.currentSpawnIntervalMs / 1000;
 
   for (let a = sys.active.length - 1; a >= 0; a--) {
     const idx = sys.active[a];
