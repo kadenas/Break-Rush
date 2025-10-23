@@ -1,7 +1,8 @@
 import { DifficultyManager } from './difficulty';
 import { createAsteroid } from '../entities/asteroid';
+import { getGameBounds } from './bounds';
 import {
-  spawnWallPattern,
+  spawnWallPattern as _spawnWallPattern,
   spawnDiagonalPattern,
   spawnTwinClampPattern,
   PatternRunner,
@@ -15,6 +16,50 @@ type SpawnAsteroidArgs = {
 type SpawnAsteroidCallback = (args: SpawnAsteroidArgs) => void;
 
 const difficulty = new DifficultyManager();
+
+// ========= Gap Reservation =========
+type GapReservation = {
+  active: boolean;
+  x0: number;
+  x1: number;
+  ttl: number;
+  topBandPx: number;
+};
+
+let gapReservation: GapReservation = {
+  active: false,
+  x0: 0,
+  x1: 0,
+  ttl: 0,
+  topBandPx: 140,
+};
+
+function reserveGap(x0: number, x1: number, seconds = 1.6) {
+  gapReservation = {
+    active: true,
+    x0,
+    x1,
+    ttl: seconds,
+    topBandPx: 140,
+  };
+}
+
+function updateGapReservation(dt: number) {
+  if (!gapReservation.active) return;
+  gapReservation.ttl -= dt;
+  if (gapReservation.ttl <= 0) {
+    gapReservation.active = false;
+  }
+}
+
+function isXInReservedGap(x: number): boolean {
+  return gapReservation.active && x >= gapReservation.x0 && x <= gapReservation.x1;
+}
+
+function shouldAvoidTopBand(y: number): boolean {
+  return gapReservation.active && y <= gapReservation.topBandPx;
+}
+// ===================================
 
 let spawnTimerMs = 0;
 let currentTargetIntervalMs = difficulty.currentSpawnIntervalMs;
@@ -34,21 +79,43 @@ function randRange(a: number, b: number) {
 }
 
 function tryStartPattern(spawnAsteroid: SpawnAsteroidCallback): PatternRunner {
-  const ctx = {
+  const baseCtx = {
     speedMul: difficulty.currentSpeedMul,
-    push: (asteroid: ReturnType<typeof createAsteroid>) => {
-      spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
-    },
   };
 
   const r = Math.random();
-  let runner: PatternRunner;
+  let runner: PatternRunner & { gapX0?: number; gapX1?: number };
   if (r < 0.5) {
-    runner = spawnWallPattern(ctx);
+    const res = _spawnWallPattern({
+      ...baseCtx,
+      playerWidthPx: 36,
+      gapSafetyPx: 10,
+      push: (asteroid) => {
+        spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
+      },
+    });
+    reserveGap(res.gapX0, res.gapX1, 1.6);
+    runner = res;
   } else if (r < 0.8) {
-    runner = spawnDiagonalPattern(ctx);
+    runner = spawnDiagonalPattern({
+      ...baseCtx,
+      push: (asteroid) => {
+        const y0 = asteroid.y ?? -40;
+        const x0 = asteroid.x ?? 0;
+        if (shouldAvoidTopBand(y0) && isXInReservedGap(x0)) return;
+        spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
+      },
+    });
   } else {
-    runner = spawnTwinClampPattern(ctx);
+    runner = spawnTwinClampPattern({
+      ...baseCtx,
+      push: (asteroid) => {
+        const y0 = asteroid.y ?? -30;
+        const x0 = asteroid.x ?? 0;
+        if (shouldAvoidTopBand(y0) && isXInReservedGap(x0)) return;
+        spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
+      },
+    });
   }
 
   patternCooldown = randRange(minPatternCooldown, maxPatternCooldown);
@@ -64,6 +131,7 @@ export function updateSpawner(
   const dtMs = dt * 1000;
 
   difficulty.update(dt, score);
+  updateGapReservation(dt);
 
   if (activePattern) {
     const done = activePattern.update(dt);
@@ -92,6 +160,26 @@ export function updateSpawner(
   spawnTimerMs += dtMs;
   while (spawnTimerMs >= currentTargetIntervalMs) {
     spawnTimerMs -= currentTargetIntervalMs;
+
+    const asteroid = createAsteroid({ speedMul: difficulty.currentSpeedMul });
+    const y0 = asteroid.y ?? 0;
+    if (shouldAvoidTopBand(y0) && isXInReservedGap(asteroid.x)) {
+      const { width } = getGameBounds();
+      const leftOk = gapReservation.x0 > 20;
+      const rightOk = gapReservation.x1 < width - 20;
+      if (leftOk || rightOk) {
+        const goLeft = leftOk && (!rightOk || Math.random() < 0.5);
+        const minX = goLeft ? 20 : gapReservation.x1 + 10;
+        const maxX = goLeft ? gapReservation.x0 - 10 : width - 20;
+        if (maxX > minX) {
+          asteroid.x = randRange(minX, maxX);
+          spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
+          continue;
+        }
+      }
+      continue;
+    }
+
     spawnAsteroid({ speedMul: difficulty.currentSpeedMul });
   }
 }
@@ -102,6 +190,13 @@ export function resetSpawner(): void {
   currentTargetIntervalMs = difficulty.currentSpawnIntervalMs;
   activePattern = null;
   patternCooldown = 0;
+  gapReservation = {
+    active: false,
+    x0: 0,
+    x1: 0,
+    ttl: 0,
+    topBandPx: 140,
+  };
 }
 
 export function notifySpawn(): void {

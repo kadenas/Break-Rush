@@ -4,86 +4,74 @@ import { createAsteroid, AsteroidSpawnOpts } from '../entities/asteroid';
 export type PatternContext = {
   speedMul: number;
   push: (a: ReturnType<typeof createAsteroid>) => void;
-  // Opcional: si dispones del ancho real de la nave, pásalo aquí
   playerWidthPx?: number;
-  // margen extra a cada lado del jugador
   gapSafetyPx?: number;
 };
 
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v));
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
 }
 
 export type PatternRunner = {
   update(dt: number): boolean;
 };
 
-/**
- * Muralla horizontal con hueco garantizado:
- * - el hueco tiene ancho >= playerWidthPx + 2*gapSafetyPx
- * - si no hay ancho suficiente, reduce nº columnas
- */
-export function spawnWallPattern(ctx: PatternContext): PatternRunner {
+export function spawnWallPattern(
+  ctx: PatternContext,
+): PatternRunner & { gapX0: number; gapX1: number } {
   const { width } = getGameBounds();
 
-  // Config por defecto si no se proporciona
   const playerW = Math.max(24, Math.floor(ctx.playerWidthPx ?? 36));
-  const safety = Math.max(6, Math.floor(ctx.gapSafetyPx ?? 8));
-
-  // Número base de columnas (más fino a mayor ancho)
-  let cols = Math.max(6, Math.round(width / 60));
-
-  // Recalcula hasta que quepa el hueco mínimo
-  // hueco mínimo en px:
+  const safety = Math.max(6, Math.floor(ctx.gapSafetyPx ?? 10));
   const minGapPx = playerW + 2 * safety;
 
-  // si la celda es muy angosta, baja columnas hasta que al menos 1-2 celdas sumen el hueco
-  // Usaremos gap en columnas enteras
-  let colWidth = width / cols;
-  let minGapCols = Math.ceil(minGapPx / colWidth);
+  let cols = Math.max(6, Math.round(width / 60));
+  let colW = width / cols;
 
-  while (cols - minGapCols < 2 && cols > 4) {
-    // si no dejamos al menos 2 columnas sólidas, reduce columnas para hacer celdas más anchas
+  let gapCols = Math.ceil(minGapPx / colW);
+  while (cols - gapCols < 2 && cols > 4) {
     cols -= 1;
-    colWidth = width / cols;
-    minGapCols = Math.ceil(minGapPx / colWidth);
+    colW = width / cols;
+    gapCols = Math.ceil(minGapPx / colW);
   }
 
-  // Por variedad: hueco de 1..minGapCols+1, pero nunca menor a minGapCols
-  const gapWidthCols = Math.max(minGapCols, Math.min(minGapCols + 1, cols - 2));
+  const gapWidthCols = clamp(
+    gapCols + (Math.random() < 0.35 ? 1 : 0),
+    gapCols,
+    cols - 2,
+  );
+  const gapStartCol = Math.floor(Math.random() * (cols - gapWidthCols + 1));
+  const gapX0 = gapStartCol * colW;
+  const gapX1 = (gapStartCol + gapWidthCols) * colW;
 
-  // Elegir inicio de hueco garantizando que cabe entero
-  const gapStart = Math.floor(Math.random() * (cols - gapWidthCols + 1));
-
-  // Parámetros de caída
   const startY = -30;
-  const vy = 220 * ctx.speedMul;
+  const vy = 220 * (ctx.speedMul || 1);
 
   for (let c = 0; c < cols; c++) {
-    if (c >= gapStart && c < gapStart + gapWidthCols) continue; // deja el hueco
+    if (c >= gapStartCol && c < gapStartCol + gapWidthCols) continue;
+    const xCenter = c * colW + colW * 0.5;
 
-    // Centro de la celda
-    const xCenter = c * colWidth + colWidth * 0.5;
+    const rMax = Math.floor(Math.min(colW * 0.42, 22));
+    const r = Math.max(9, rMax);
 
-    // Radio adaptado al ancho de celda para no invadir el hueco:
-    const r = Math.max(10, Math.floor(colWidth * 0.35));
-
-    // Asegurar que el meteorito no sale fuera ni pisa el hueco por desborde
     const safeX = clamp(xCenter, r, width - r);
 
     const opts: AsteroidSpawnOpts = {
       x: safeX,
       y: startY,
-      vy,
       vx: 0,
-      speedMul: 1, // vy ya fijado
+      vy,
+      speedMul: 1,
       radius: r,
     };
-
     ctx.push(createAsteroid(opts));
   }
 
-  return { update: () => true };
+  return {
+    update: () => true,
+    gapX0,
+    gapX1,
+  };
 }
 
 export function spawnDiagonalPattern(ctx: PatternContext): PatternRunner {
