@@ -2,7 +2,9 @@ import { gameDifficulty } from '../game/spawner';
 import { triggerPlayerBonusFlash, triggerPlayerHitFlash, type Player } from '../game/player';
 import { setMusicTempo, setMusicVolume } from './audio';
 
-let pulseTimer = 0;
+let timeSinceAudioUpdate = 0;
+let flashTimer = 0;
+let lastLevel = 0;
 let currentTempo = 1;
 let currentVolume = 0.8;
 let vibrationEnabled = true;
@@ -17,25 +19,32 @@ export function setFeedbackVibration(on: boolean) {
 /**
  * Llamar en cada frame: ajusta feedback global según dificultad.
  */
-export function updateFeedback(dt: number, canvas: HTMLCanvasElement) {
+export function updateFeedback(dt: number, _canvas?: HTMLCanvasElement) {
   const level = Math.max(0, gameDifficulty.level);
   const speedMul = Math.max(0, gameDifficulty.currentSpeedMul);
 
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    pulseTimer += dt * (0.4 + speedMul * 0.3);
-    const pulse = 0.04 * Math.sin(pulseTimer * Math.PI * 2);
-    ctx.filter = `brightness(${(1 + pulse).toFixed(3)})`;
+  // --- AUDIO: actualizar solo una vez por segundo o cuando cambie el nivel ---
+  timeSinceAudioUpdate += dt;
+  if (timeSinceAudioUpdate > 1 || level !== lastLevel) {
+    const targetTempo = 1 + level * 0.03;
+    const targetVolume = 0.7 + Math.min(0.3, speedMul * 0.15);
+
+    currentTempo += (targetTempo - currentTempo) * 0.25;
+    currentVolume += (targetVolume - currentVolume) * 0.25;
+
+    setMusicTempo(currentTempo);
+    setMusicVolume(currentVolume);
+
+    lastLevel = level;
+    timeSinceAudioUpdate = 0;
   }
 
-  const targetTempo = 1 + level * 0.03;
-  const targetVolume = 0.7 + Math.min(0.3, speedMul * 0.15);
-
-  currentTempo += (targetTempo - currentTempo) * 0.05;
-  currentVolume += (targetVolume - currentVolume) * 0.05;
-
-  setMusicTempo(currentTempo);
-  setMusicVolume(currentVolume);
+  // --- EFECTO VISUAL: parpadeo leve controlado por CSS ---
+  flashTimer += dt * (0.4 + speedMul * 0.2);
+  const brightness = 1 + 0.03 * Math.sin(flashTimer * Math.PI * 2);
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty('--scene-brightness', brightness.toFixed(3));
+  }
 }
 
 export function triggerHitFeedback(player?: Player) {
