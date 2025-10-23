@@ -43,6 +43,9 @@ export function setMusic(on: boolean) {
 
 export function setMusicTempo(rate: number) {
   const clamped = Math.min(MUSIC_TEMPO_MAX, Math.max(MUSIC_TEMPO_MIN, rate));
+  if (Math.abs(clamped - musicTempo) < 0.02) {
+    return;
+  }
   musicTempo = Number.isFinite(clamped) ? clamped : musicTempo;
   const handle = currentHandle;
   const source = handle?.source;
@@ -59,6 +62,9 @@ export function setMusicTempo(rate: number) {
 
 export function setMusicVolume(volume: number) {
   const clamped = Math.min(1, Math.max(0, volume));
+  if (Math.abs(clamped - musicVolume) < 0.02) {
+    return;
+  }
   musicVolume = Number.isFinite(clamped) ? clamped : musicVolume;
   const handle = currentHandle;
   const gain = handle?.gain;
