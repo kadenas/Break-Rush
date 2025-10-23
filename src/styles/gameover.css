@@ -6,7 +6,16 @@
   inset: 0;
   z-index: 1200;
   display: none;
-  background: rgba(0,0,0,0.6);
+
+  /* Capa 1: velo oscuro; Capa 2: imagen del menú */
+  background-image:
+    linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
+    url('/images/start.png');
+  background-size: auto, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+
+  /* Si el browser no soporta el blur anterior, da igual */
   backdrop-filter: blur(2px);
 }
 
