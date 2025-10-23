@@ -29,6 +29,7 @@ import {
   onRetry as audioOnRetry,
 } from '../fx/audio';
 import { unlockSync } from '../audio/audioManager';
+import { shareScore } from '../share';
 
 let started = false;
 function startGameSafe() {
@@ -108,12 +109,27 @@ const goPlay = () => {
   setState('playing');
 };
 
+const goMenu = () => {
+  if (started) {
+    stopMusic();
+  }
+  resetMessages();
+  setState('menu');
+  if (started) {
+    audioToIntro();
+  }
+};
+
 export function requestMenuStart() {
   goPlay();
 }
 
 export function requestMenuSettings() {
   setState('settings');
+}
+
+export function requestMenuReturn() {
+  goMenu();
 }
 
 export function bootGame(c: HTMLCanvasElement) {
@@ -271,14 +287,7 @@ export function bootGame(c: HTMLCanvasElement) {
     label: 'Menu',
     visible: () => getState() === 'pause',
     onClick: () => {
-      if (started) {
-        stopMusic();
-      }
-      resetMessages();
-      setState('menu');
-      if (started) {
-        audioToIntro();
-      }
+      goMenu();
     },
   });
 
@@ -301,7 +310,9 @@ export function bootGame(c: HTMLCanvasElement) {
     h: BTN_H,
     label: 'Share',
     visible: () => getState() === 'gameover',
-    onClick: () => shareScoreSmart(),
+    onClick: () => {
+      shareScore(getScore(obs));
+    },
   });
   registerButton({
     id: 'menu-go',
@@ -312,14 +323,7 @@ export function bootGame(c: HTMLCanvasElement) {
     label: 'Menu',
     visible: () => getState() === 'gameover',
     onClick: () => {
-      if (started) {
-        stopMusic();
-      }
-      resetMessages();
-      setState('menu');
-      if (started) {
-        audioToIntro();
-      }
+      goMenu();
     },
   });
 
@@ -558,33 +562,19 @@ function render(dt: number) {
   updateMessages(dt);
   drawMessages(ctx);
 
-  if (st === 'gameover') {
-    ctx.fillStyle='rgba(255,255,255,0.9)';
-    ctx.textAlign='center';
-    ctx.font='14px system-ui';
-    const belt = beltName(totalRank);
-    ctx.fillText(`Rango total: ${totalRank} · ${belt}`, VW*0.5, VH*0.48);
-  }
-
   // UI (botones)
   drawUI(ctx);
 
   drawDebugHUD(ctx, dt, L, canvas);
 }
 
-function shareScoreSmart() {
-  const score = getScore(obs);
-  const url = `${location.origin}${location.pathname}`;
-  const text = `Mi puntuación en Break Rush: ${score} pts`;
-  if (navigator.share) {
-    navigator.share({ title: 'Break Rush', text, url }).catch(() => {});
-  } else {
-    const whatsapp = `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`;
-    const telegram = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
-    const useWhatsapp = window.confirm('Share via WhatsApp? Cancel for Telegram.');
-    const href = useWhatsapp ? whatsapp : telegram;
-    window.open(href, '_blank', 'noreferrer');
-  }
+export function getGameOverInfo() {
+  const points = getScore(obs);
+  const belt = beltName(totalRank);
+  return {
+    points,
+    rankText: `Rango total: ${totalRank} · ${belt}`,
+  };
 }
 
 function applyFrameFade(ctx: CanvasRenderingContext2D, alpha: number) {

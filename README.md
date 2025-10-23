@@ -28,6 +28,14 @@ Se añade `src/input/inputGate.ts`. Tras cada transición de pantalla se llama a
 ### Control inmediato al iniciar el juego
 Se implementa un traspaso del “toque en curso” del usuario al canvas del juego. Si el jugador pulsa Start sin levantar el dedo, al entrar en gameplay se inyecta un `pointerdown` sobre el canvas y la nave responde al instante. El gate anti-ghost-click solo se usa en transiciones hacia pantallas con UI (ej: menú).
 
+### Game Over: layout y compartir
+- Se reorganiza **GAME OVER** para que el título y el rango/puntuación queden arriba y no los tapen los botones.
+- El botón **Share** usa Web Share API (si disponible) y formatea el mensaje con varias líneas:
+
+  Mi puntuación en Break Rush: XXX pts
+  Superalo, si puedes !!
+  https://hallofgame.gleeze.com
+
 ### Linting
 
 ```bash
