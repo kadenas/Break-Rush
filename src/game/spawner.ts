@@ -86,9 +86,10 @@ const minPatternCooldown = 3.5;
 const maxPatternCooldown = 7.0;
 
 function rollPatternChance(level: number): number {
-  // Antes subía demasiado rápido; bajamos el multiplicador.
-  const p = 0.05 + level * 0.008;
-  return Math.min(0.18, p);
+  // Tramo acorde a la curva arcade:
+  if (level <= 4) return 0.04 + level * 0.006; // 4%..6.4%
+  if (level <= 9) return 0.07 + (level - 4) * 0.01; // 7%..12%
+  return Math.min(0.18, 0.12 + Math.log2(level - 8) * 0.02); // cap 18%
 }
 
 function randRange(a: number, b: number) {

@@ -9,7 +9,15 @@ export type Bonus = {
   active: boolean;
   blinkTimer: number;
   color: string;
+  stroke?: string;
+  strokeWidth?: number;
 };
+
+const palette = {
+  score: { fill: '#FFD700', stroke: '#FFF3A0' },
+  shield: { fill: '#00FF88', stroke: '#C8FFE0' },
+  slowmo: { fill: '#FF33AA', stroke: '#FFC0E6' },
+} as const;
 
 function pickBonusType(): BonusType {
   const roll = Math.random();
@@ -18,20 +26,9 @@ function pickBonusType(): BonusType {
   return 'slowmo';
 }
 
-function colorFor(type: BonusType): string {
-  switch (type) {
-    case 'score':
-      return '#FFD700';
-    case 'shield':
-      return '#00E0FF';
-    case 'slowmo':
-    default:
-      return '#FF33AA';
-  }
-}
-
 export function createBonus(x: number, y: number, speedMul: number): Bonus {
   const type = pickBonusType();
+  const col = palette[type];
   return {
     x,
     y,
@@ -40,7 +37,9 @@ export function createBonus(x: number, y: number, speedMul: number): Bonus {
     type,
     active: true,
     blinkTimer: 0,
-    color: colorFor(type),
+    color: col.fill,
+    stroke: col.stroke,
+    strokeWidth: 3,
   };
 }
 
@@ -55,12 +54,21 @@ export function updateBonus(b: Bonus, dt: number): void {
 
 export function renderBonus(ctx: CanvasRenderingContext2D, b: Bonus): void {
   if (!b.active) return;
-  const alpha = b.blinkTimer < 0.25 ? 1 : 0.6;
-  ctx.save();
+  const alpha = b.blinkTimer < 0.25 ? 1 : 0.75;
+
+  if (b.stroke) {
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r + (b.strokeWidth ?? 3), 0, Math.PI * 2);
+    ctx.fillStyle = b.stroke;
+    ctx.fill();
+  }
+
   ctx.globalAlpha = alpha;
   ctx.fillStyle = b.color;
   ctx.beginPath();
   ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
+
+  ctx.globalAlpha = 1;
 }
