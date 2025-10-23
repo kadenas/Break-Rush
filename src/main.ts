@@ -8,6 +8,7 @@ import { armAfterScreenChange, handOffActivePointerTo } from './input/inputGate'
 import { onStateChange, getState } from './core/state';
 import { ensureGameOverDOM, showGameOver, hideGameOver } from './ui/gameOver';
 import { gameDifficulty } from './game/spawner';
+import { setGameBounds } from './game/bounds';
 
 const loadMenuBackground = (() => {
   let promise: Promise<void> | null = null;
@@ -24,6 +25,7 @@ function sizeCanvas(c: HTMLCanvasElement){
   c.width  = Math.floor(L.vwCss * L.dpr);
   c.height = Math.floor(L.vhCss * L.dpr);
   Object.assign(c.style, { position:'fixed', left:'0px', top:'0px', width:'100vw', height:'100vh' } as CSSStyleDeclaration);
+  setGameBounds({ width: c.width, height: c.height, left: 0, top: 0 });
 }
 function qs<T extends HTMLElement>(sel:string){ const el=document.querySelector(sel) as T|null; if(!el) throw new Error(`No encontrado: ${sel}`); return el; }
 

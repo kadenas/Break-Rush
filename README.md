@@ -36,6 +36,14 @@ Se añade `DifficultyManager` (`src/game/difficulty.ts`). La dificultad sube con
 
 Ajusta los parámetros en `DifficultyConfig` según el balance deseado.
 
+### Patrones de meteoritos
+`src/game/patterns.ts` añade tres variantes especiales:
+- **Muralla**: fila horizontal con 1–2 columnas de hueco.
+- **Diagonal**: serie temporizada que cruza la pantalla.
+- **Pinza doble**: dos meteoritos que convergen desde los laterales.
+
+El `Spawner` coordina la probabilidad y cooldown de aparición (`rollPatternChance`, `patternCooldown`) y pausa el spawn normal mientras el patrón está activo. Los límites del área jugable provienen de `src/game/bounds.ts`.
+
 ### Game Over: layout y compartir
 - Se reorganiza **GAME OVER** para que el título y el rango/puntuación queden arriba y no los tapen los botones.
 - El botón **Share** usa Web Share API (si disponible) y formatea el mensaje con varias líneas:

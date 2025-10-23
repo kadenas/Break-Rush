@@ -11,7 +11,7 @@ const LANES = 5;
 
 export interface Ob {
   x: number; y: number; r: number;
-  vy: number;
+  vx: number; vy: number;
   alive: boolean;
   scored: boolean;
   lane: number;
@@ -34,7 +34,7 @@ export interface ObSystem {
 export function createObSystem(): ObSystem {
   const best = Number(localStorage.getItem('br_best') || '0') || 0;
   const pool = Array.from({ length: 64 }, () => ({
-    x: 0, y: -100, r: 12, vy: 120,
+    x: 0, y: -100, r: 12, vx: 0, vy: 120,
     alive: false, scored: false,
     lane: -1, spawnTime: -1,
     scoreValue: 10, big: false,
@@ -60,6 +60,7 @@ function alloc(sys: ObSystem): Ob | null {
       sys.active.push(i);
       o.alive = true;
       o.scored = false;
+      o.vx = 0;
       o.big = false;
       o.lane = -1;
       o.spawnTime = -1;
@@ -101,7 +102,40 @@ function canSpawnInLane(sys: ObSystem, lane: number, spawnY: number): boolean {
   return true;
 }
 
-function spawn(sys: ObSystem, speedMul: number) {
+type SpawnRequest = {
+  speedMul: number;
+  asteroid?: ReturnType<typeof createAsteroid>;
+};
+
+function spawnPattern(sys: ObSystem, asteroid: ReturnType<typeof createAsteroid>) {
+  const o = alloc(sys);
+  if (!o) return;
+
+  const isBig = asteroid.big ?? false;
+  const radius = asteroid.r ?? 14;
+
+  Object.assign(o, {
+    x: asteroid.x,
+    y: asteroid.y,
+    r: radius,
+    vx: asteroid.vx,
+    vy: asteroid.vy,
+    lane: -1,
+    spawnTime: sys.elapsed,
+    scoreValue: isBig ? 30 : 10,
+    big: isBig,
+  });
+
+  sys.kicked = true;
+}
+
+function spawn(sys: ObSystem, request: SpawnRequest) {
+  if (request.asteroid) {
+    spawnPattern(sys, request.asteroid);
+    return;
+  }
+
+  const { speedMul } = request;
   const o = alloc(sys);
   if (!o) return;
 
@@ -135,6 +169,7 @@ function spawn(sys: ObSystem, speedMul: number) {
 
   Object.assign(o, {
     x: spawnX, y: spawnY, r,
+    vx: 0,
     vy, lane: chosenLane,
     spawnTime: sys.elapsed,
     scoreValue: isBig ? 30 : 10,
@@ -146,7 +181,7 @@ function spawn(sys: ObSystem, speedMul: number) {
 
 export function ensureKickstart(sys: ObSystem) {
   if (!sys.kicked && sys.elapsed > 0.4) {
-    spawn(sys, gameDifficulty.currentSpeedMul);
+    spawn(sys, { speedMul: gameDifficulty.currentSpeedMul });
     notifySpawn();
   }
 }
@@ -154,8 +189,8 @@ export function ensureKickstart(sys: ObSystem) {
 export function updateObstacles(sys: ObSystem, dt: number) {
   sys.elapsed += dt;
   const scoreInt = Math.floor(sys.score);
-  updateSpawner(dt, scoreInt, ({ speedMul }) => {
-    spawn(sys, speedMul);
+  updateSpawner(dt, scoreInt, (args) => {
+    spawn(sys, args);
   });
   sys.waveIntensity = gameDifficulty.waveIntensity;
   sys.spawnIntervalSec = gameDifficulty.currentSpawnIntervalMs / 1000;
@@ -165,6 +200,7 @@ export function updateObstacles(sys: ObSystem, dt: number) {
     const o = sys.pool[idx];
     if (!o.alive) { sys.active.splice(a, 1); continue; }
 
+    o.x += o.vx * dt;
     o.y += o.vy * dt;
 
     if (!o.scored && o.y - o.r > VH) {
