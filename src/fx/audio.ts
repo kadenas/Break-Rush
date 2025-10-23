@@ -17,6 +17,8 @@ let currentHandle: MusicHandle | null = null;
 let desiredState: MusicState = 'idle';
 let activeState: MusicState = 'idle';
 
+const sounds: Record<string, HTMLAudioElement> = {};
+
 const MUSIC_TEMPO_MIN = 0.5;
 const MUSIC_TEMPO_MAX = 1.8;
 
@@ -81,6 +83,39 @@ export function setMusicVolume(volume: number) {
 
 export function setSfx(on: boolean) {
   sfxEnabled = on;
+}
+
+export function preloadSound(name: string, src: string) {
+  if (typeof Audio === 'undefined') {
+    return;
+  }
+  const audio = new Audio(src);
+  audio.preload = 'auto';
+  try {
+    audio.load();
+  } catch {
+    /* ignore */
+  }
+  sounds[name] = audio;
+}
+
+export function playSound(name: string) {
+  if (!sfxEnabled) {
+    return;
+  }
+  const source = sounds[name];
+  if (!source) {
+    return;
+  }
+  source.pause();
+  try {
+    source.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+  source.playbackRate = 1;
+  source.volume = 1;
+  void source.play().catch(() => {});
 }
 
 export function stopMusic() {

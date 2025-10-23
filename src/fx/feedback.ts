@@ -2,12 +2,45 @@ import { gameDifficulty } from '../game/spawner';
 import { triggerPlayerBonusFlash, triggerPlayerHitFlash, type Player } from '../game/player';
 import { setMusicTempo, setMusicVolume } from './audio';
 
+const BASE_TEMPO = 1;
+const BASE_VOLUME = 0.8;
+
 let timeSinceAudioUpdate = 0;
 let flashTimer = 0;
 let lastLevel = 0;
-let currentTempo = 1;
-let currentVolume = 0.8;
+let currentTempo = BASE_TEMPO;
+let currentVolume = BASE_VOLUME;
 let vibrationEnabled = true;
+let feedbackEnabled = true;
+
+export function setFeedbackEnabled(on: boolean) {
+  if (feedbackEnabled === on) {
+    if (!on) {
+      setMusicTempo(BASE_TEMPO);
+      setMusicVolume(BASE_VOLUME);
+      resetSceneBrightness();
+    }
+    return;
+  }
+
+  feedbackEnabled = on;
+
+  if (!on) {
+    currentTempo = BASE_TEMPO;
+    currentVolume = BASE_VOLUME;
+    timeSinceAudioUpdate = 0;
+    setMusicTempo(BASE_TEMPO);
+    setMusicVolume(BASE_VOLUME);
+    resetSceneBrightness();
+    return;
+  }
+
+  currentTempo = BASE_TEMPO;
+  currentVolume = BASE_VOLUME;
+  timeSinceAudioUpdate = 1;
+  lastLevel = -1;
+  resetSceneBrightness();
+}
 
 /**
  * Permite habilitar o deshabilitar vibraciones dinámicas.
@@ -20,13 +53,17 @@ export function setFeedbackVibration(on: boolean) {
  * Llamar en cada frame: ajusta feedback global según dificultad.
  */
 export function updateFeedback(dt: number, _canvas?: HTMLCanvasElement) {
+  if (!feedbackEnabled) {
+    return;
+  }
+
   const level = Math.max(0, gameDifficulty.level);
   const speedMul = Math.max(0, gameDifficulty.currentSpeedMul);
 
   // --- AUDIO: actualizar solo una vez por segundo o cuando cambie el nivel ---
   timeSinceAudioUpdate += dt;
   if (timeSinceAudioUpdate > 1 || level !== lastLevel) {
-    const targetTempo = 1 + level * 0.03;
+    const targetTempo = BASE_TEMPO + level * 0.03;
     const targetVolume = 0.7 + Math.min(0.3, speedMul * 0.15);
 
     currentTempo += (targetTempo - currentTempo) * 0.25;
@@ -102,4 +139,11 @@ function flashScreen(color: string) {
     setTimeout(fade, 30);
   }
   setTimeout(() => flash.remove(), 400);
+}
+
+function resetSceneBrightness() {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  document.documentElement.style.setProperty('--scene-brightness', '1.000');
 }

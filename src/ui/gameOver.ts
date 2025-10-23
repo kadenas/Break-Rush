@@ -1,6 +1,8 @@
 import '../styles/gameover.css';
 import { shareScore } from '../share';
 import { armAfterScreenChange } from '../input/inputGate';
+import { setFeedbackEnabled } from '../fx/feedback';
+import { playSound } from '../fx/audio';
 
 type GameOverHandlers = {
   onRetry: () => void;
@@ -59,6 +61,9 @@ export function ensureGameOverDOM(h: GameOverHandlers) {
 }
 
 export function showGameOver(points: number, rankText: string) {
+  setFeedbackEnabled(false);
+  playSound('game_over');
+
   if (!root) return;
 
   armAfterScreenChange();

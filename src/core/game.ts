@@ -37,7 +37,7 @@ import {
 } from '../fx/audio';
 import { unlockSync } from '../audio/audioManager';
 import { shareScore } from '../share';
-import { setFeedbackVibration, triggerHitFeedback, updateFeedback } from '../fx/feedback';
+import { setFeedbackEnabled, setFeedbackVibration, triggerHitFeedback, updateFeedback } from '../fx/feedback';
 
 let started = false;
 function startGameSafe() {
@@ -110,6 +110,7 @@ const goPlay = () => {
   levelBannerT = 0;
   levelShown = 1;
   nextMilestone = 100;
+  setFeedbackEnabled(true);
   if (started && settings.music) {
     if (prevState === 'gameover') {
       audioOnRetry();
