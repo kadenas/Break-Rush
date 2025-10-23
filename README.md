@@ -20,6 +20,8 @@ npm run dev
 
 The dev server launches at [http://localhost:5173](http://localhost:5173) with hot reloading. The game listens for a “Tap to start” gesture to unlock audio. Pointer and keyboard controls both work on desktop.
 
+> **Menu background**: the start screen expects `public/images/start.png`. The repository ships an empty `.gitkeep`; copy the real PNG into that path during deployment.
+
 ### Linting
 
 ```bash
