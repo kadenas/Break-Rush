@@ -7,5 +7,6 @@ yarn-error.log*
 .pnpm-debug.log*
 dist
 public/audio/
+public/images/start.png
 *.mp3
 *.ogg

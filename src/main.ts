@@ -1,8 +1,35 @@
 import { computeLayout } from './engine/viewport';
 import { initInput } from './engine/input';
 import { initControls } from './engine/controls';
-import { bootGame } from './core/game';
+import { bootGame, requestMenuStart, requestMenuSettings } from './core/game';
 import { installGlobalErrorOverlay, errorBanner } from './boot/errorOverlay';
+import { preloadMenuBackground, showMainMenu, hideMainMenu } from './ui/menu';
+import { onStateChange, getState } from './core/state';
+
+const loadMenuBackground = (() => {
+  let promise: Promise<void> | null = null;
+  return () => {
+    if (!promise) {
+      promise = preloadMenuBackground();
+    }
+    return promise;
+  };
+})();
+
+const menuHandlers = {
+  onStart: () => {
+    hideMainMenu();
+    requestMenuStart();
+  },
+  onSettings: () => {
+    hideMainMenu();
+    requestMenuSettings();
+  },
+};
+
+const showMenuOverlay = () => {
+  showMainMenu(menuHandlers);
+};
 
 function sizeCanvas(c: HTMLCanvasElement){
   const L = computeLayout();
@@ -30,6 +57,26 @@ window.addEventListener('DOMContentLoaded', ()=>{
     initInput(canvas);
     initControls(canvas);
     bootGame(canvas);
+
+    const gateBtn = document.getElementById('gate-btn');
+    gateBtn?.addEventListener('click', async () => {
+      await loadMenuBackground();
+      if (getState() === 'menu') {
+        showMenuOverlay();
+      }
+    });
+
+    onStateChange((state) => {
+      if (state === 'menu') {
+        loadMenuBackground().then(() => {
+          if (getState() === 'menu') {
+            showMenuOverlay();
+          }
+        });
+      } else {
+        hideMainMenu();
+      }
+    });
 
   }catch(e:any){
     errorBanner(`BOOT FAIL: ${e?.message||e}`);

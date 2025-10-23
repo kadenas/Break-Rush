@@ -108,6 +108,14 @@ const goPlay = () => {
   setState('playing');
 };
 
+export function requestMenuStart() {
+  goPlay();
+}
+
+export function requestMenuSettings() {
+  setState('settings');
+}
+
 export function bootGame(c: HTMLCanvasElement) {
   canvas = c;
   const g = canvas.getContext('2d');
@@ -511,10 +519,7 @@ function render(dt: number) {
   } else {
     // Menús
     if (st === 'menu') {
-      ctx.fillStyle='#fff'; ctx.font='bold 28px system-ui'; ctx.textAlign='center';
-      ctx.fillText('Break Rush – by Kapitán Jero', VW*0.5, VH*0.42);
-      ctx.fillStyle='#9cc2ff'; ctx.font='16px system-ui';
-      ctx.fillText('Evita los meteoritos', VW*0.5, VH*0.48);
+      // Overlay menu handles presentation.
     }
     if (st === 'settings') {
       ctx.fillStyle='#fff'; ctx.font='bold 24px system-ui'; ctx.textAlign='center';
