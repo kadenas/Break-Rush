@@ -1,5 +1,5 @@
 import { getState, setState } from './state';
-import { createPlayer, updatePlayer, drawPlayer } from '../game/player';
+import { createPlayer, updatePlayer, drawPlayer, isShieldActive, consumeShield } from '../game/player';
 import { applyRenderTransform, computeLayout, VW, VH } from '../engine/viewport';
 import { drawDebugHUD } from '../engine/debug';
 import {
@@ -17,6 +17,7 @@ import {
 import { getClick } from '../engine/input';
 import { drawUI, registerButton, hitUI, clearButtons } from '../ui/ui';
 import { updateMessages, drawMessages, resetMessages, maybeSpawnAuto, spawnMilestoneMessage } from '../fx/messages';
+import { updateBonuses, renderBonuses, resetBonuses } from '../game/bonusSpawner';
 import {
   audioInit,
   stopMusic,
@@ -88,6 +89,7 @@ function resetRun() {
   player.x = VW / 2;
   player.y = VH * 0.8;
   resetObstacles(obs);
+  resetBonuses();
 }
 
 const goPlay = () => {
@@ -114,6 +116,7 @@ const goMenu = () => {
     stopMusic();
   }
   resetMessages();
+  resetBonuses();
   setState('menu');
   if (started) {
     audioToIntro();
@@ -437,6 +440,9 @@ function loop(now: number) {
     updatePlayer(player, dt);
     ensureKickstart(obs);
     updateObstacles(obs, dt);
+    updateBonuses(dt, player, (amount) => {
+      obs.score += amount;
+    });
     maybeSpawnAuto();
 
     const sc = getScore(obs);
@@ -453,6 +459,12 @@ function loop(now: number) {
       const o = obs.pool[idx];
       if (!o.alive) continue;
       if (collideCircle(player.x, player.y, player.r, o)) {
+        if (isShieldActive(player)) {
+          consumeShield(player);
+          o.alive = false;
+          flashes.push({ t: 0, life: 0.25, x: player.x, y: player.y, r: 70 });
+          continue;
+        }
         if (started) {
           audioOnHit();
         }
@@ -501,6 +513,7 @@ function render(dt: number) {
   // 3) Dibujo del juego
   if (st !== 'menu' && st !== 'settings') {
     drawObstacles(ctx, obs);
+    renderBonuses(ctx);
     drawPlayer(ctx, player);
 
     // HUD (score y best)

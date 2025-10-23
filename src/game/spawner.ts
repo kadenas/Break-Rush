@@ -17,6 +17,9 @@ type SpawnAsteroidCallback = (args: SpawnAsteroidArgs) => void;
 
 const difficulty = new DifficultyManager();
 
+let speedModifier = 1;
+let speedModifierTimer = 0;
+
 // ========== Corredor dinámico ==========
 type Corridor = {
   active: boolean;
@@ -93,7 +96,7 @@ function randRange(a: number, b: number) {
 
 function tryStartPattern(spawnAsteroid: SpawnAsteroidCallback): PatternRunner {
   const baseCtx = {
-    speedMul: difficulty.currentSpeedMul,
+    speedMul: getGlobalSpeedMul(),
   };
 
   const r = Math.random();
@@ -104,7 +107,7 @@ function tryStartPattern(spawnAsteroid: SpawnAsteroidCallback): PatternRunner {
       playerWidthPx: 36,
       gapSafetyPx: 12,
       push: (asteroid) => {
-        spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
+        spawnAsteroid({ speedMul: getGlobalSpeedMul(), asteroid });
       },
     });
     startCorridor(res.gapX0, res.gapX1, res.gapVy, res.gapHeightPx, 1.8);
@@ -116,7 +119,7 @@ function tryStartPattern(spawnAsteroid: SpawnAsteroidCallback): PatternRunner {
         const x0 = asteroid.x ?? 0;
         const y0 = asteroid.y ?? -40;
         if (pointInCorridor(x0, y0)) return;
-        spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
+        spawnAsteroid({ speedMul: getGlobalSpeedMul(), asteroid });
       },
     });
   } else {
@@ -126,7 +129,7 @@ function tryStartPattern(spawnAsteroid: SpawnAsteroidCallback): PatternRunner {
         const x0 = asteroid.x ?? 0;
         const y0 = asteroid.y ?? -30;
         if (pointInCorridor(x0, y0)) return;
-        spawnAsteroid({ speedMul: difficulty.currentSpeedMul, asteroid });
+        spawnAsteroid({ speedMul: getGlobalSpeedMul(), asteroid });
       },
     });
   }
@@ -142,6 +145,13 @@ export function updateSpawner(
   spawnAsteroid: SpawnAsteroidCallback,
 ): void {
   const dtMs = dt * 1000;
+
+  if (speedModifierTimer > 0) {
+    speedModifierTimer = Math.max(0, speedModifierTimer - dt);
+    if (speedModifierTimer === 0) {
+      speedModifier = 1;
+    }
+  }
 
   difficulty.update(dt, score);
   updateCorridor(dt);
@@ -176,7 +186,7 @@ export function updateSpawner(
     if (corridor.active) {
       continue;
     }
-    spawnAsteroid({ speedMul: difficulty.currentSpeedMul });
+    spawnAsteroid({ speedMul: getGlobalSpeedMul() });
   }
 }
 
@@ -186,6 +196,8 @@ export function resetSpawner(): void {
   currentTargetIntervalMs = difficulty.currentSpawnIntervalMs;
   activePattern = null;
   patternCooldown = 0;
+  speedModifier = 1;
+  speedModifierTimer = 0;
   corridor = {
     active: false,
     x0: 0,
@@ -202,7 +214,22 @@ export function notifySpawn(): void {
 }
 
 export function getGlobalSpeedMul(): number {
-  return difficulty.currentSpeedMul;
+  return difficulty.currentSpeedMul * speedModifier;
 }
 
 export const gameDifficulty = difficulty;
+
+export function applySpeedModifier(factor: number, duration: number): void {
+  if (factor <= 0) return;
+  const clamped = Math.min(1, factor);
+  if (speedModifier === 1) {
+    speedModifier = clamped;
+  } else {
+    speedModifier = Math.min(speedModifier, clamped);
+  }
+  speedModifierTimer = Math.max(speedModifierTimer, duration);
+}
+
+export function getSpeedModifier(): number {
+  return speedModifier;
+}

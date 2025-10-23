@@ -5,6 +5,8 @@ import {
   resetSpawner,
   notifySpawn,
   gameDifficulty,
+  getGlobalSpeedMul,
+  getSpeedModifier,
 } from './spawner';
 
 const LANES = 5;
@@ -181,7 +183,7 @@ function spawn(sys: ObSystem, request: SpawnRequest) {
 
 export function ensureKickstart(sys: ObSystem) {
   if (!sys.kicked && sys.elapsed > 0.4) {
-    spawn(sys, { speedMul: gameDifficulty.currentSpeedMul });
+    spawn(sys, { speedMul: getGlobalSpeedMul() });
     notifySpawn();
   }
 }
@@ -195,13 +197,15 @@ export function updateObstacles(sys: ObSystem, dt: number) {
   sys.waveIntensity = gameDifficulty.waveIntensity;
   sys.spawnIntervalSec = gameDifficulty.currentSpawnIntervalMs / 1000;
 
+  const movementDt = dt * getSpeedModifier();
+
   for (let a = sys.active.length - 1; a >= 0; a--) {
     const idx = sys.active[a];
     const o = sys.pool[idx];
     if (!o.alive) { sys.active.splice(a, 1); continue; }
 
-    o.x += o.vx * dt;
-    o.y += o.vy * dt;
+    o.x += o.vx * movementDt;
+    o.y += o.vy * movementDt;
 
     if (!o.scored && o.y - o.r > VH) {
       sys.score += o.scoreValue;
