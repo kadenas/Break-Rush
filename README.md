@@ -44,6 +44,14 @@ Ajusta los parámetros en `DifficultyConfig` según el balance deseado.
 
 El `Spawner` coordina la probabilidad y cooldown de aparición (`rollPatternChance`, `patternCooldown`) y pausa el spawn normal mientras el patrón está activo. Los límites del área jugable provienen de `src/game/bounds.ts`.
 
+### Bonus y recolectables
+Aparecen ocasionalmente durante la partida:
+- **Dorado**: +50 puntos
+- **Azul**: escudo temporal
+- **Rosa**: tiempo lento
+
+Los bonus se generan más a menudo en niveles altos. Colisionar con uno lo activa y muestra un mensaje.
+
 ### Game Over: layout y compartir
 - Se reorganiza **GAME OVER** para que el título y el rango/puntuación queden arriba y no los tapen los botones.
 - El botón **Share** usa Web Share API (si disponible) y formatea el mensaje con varias líneas:

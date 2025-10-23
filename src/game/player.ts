@@ -9,10 +9,18 @@ export interface Player {
   r: number;
   speedMax: number;
   trail: TrailPoint[];
+  shieldTimer: number;
 }
 
 export function createPlayer(): Player {
-  const player: Player = { x: VW / 2, y: VH * 0.8, r: 14, speedMax: 220, trail: [] };
+  const player: Player = {
+    x: VW / 2,
+    y: VH * 0.8,
+    r: 14,
+    speedMax: 220,
+    trail: [],
+    shieldTimer: 0,
+  };
   resetPlayerTrail(player);
   return player;
 }
@@ -54,6 +62,10 @@ export function updatePlayer(p: Player, dt: number) {
     trail.push({ x: p.x, y: p.y });
     if (trail.length > 12) trail.shift();
   }
+
+  if (p.shieldTimer > 0) {
+    p.shieldTimer = Math.max(0, p.shieldTimer - dt);
+  }
 }
 
 export function drawTrail(ctx: CanvasRenderingContext2D, p: Player) {
@@ -92,4 +104,30 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, p: Player) {
   ctx.beginPath();
   ctx.arc(p.x, p.y, p.r - 0.5, 0, Math.PI * 2);
   ctx.stroke();
+
+  if (p.shieldTimer > 0) {
+    const alpha = Math.min(1, 0.3 + (p.shieldTimer % 0.6) / 1.2);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#71f5ff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r + 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+const SHIELD_DEFAULT_DURATION = 6;
+
+export function activateShield(p: Player, duration = SHIELD_DEFAULT_DURATION) {
+  p.shieldTimer = Math.max(p.shieldTimer, duration);
+}
+
+export function isShieldActive(p: Player): boolean {
+  return p.shieldTimer > 0;
+}
+
+export function consumeShield(p: Player) {
+  p.shieldTimer = 0;
 }

@@ -24,6 +24,9 @@ export const messages: Phrase[] = [
   { text: '¡Eres un fenómeno!', weight: 3 },
   { text: '¡Estamos orgullosos!', weight: 1 },
   { text: '¡Mastodonte!', weight: 2 },
+  { text: '¡Bonus de oro!', weight: 1 },
+  { text: '¡Escudo activado!', weight: 1 },
+  { text: '¡Tiempo lento!', weight: 1 },
 ];
 
 // Pool específico para hito
@@ -100,6 +103,10 @@ export function spawnMessage(text?: string) {
   };
   ACTIVE.push(msg);
   remember(msg.text);
+}
+
+export function playMessage(text: string) {
+  spawnMessage(text);
 }
 
 export function drawMessages(ctx: CanvasRenderingContext2D) {
