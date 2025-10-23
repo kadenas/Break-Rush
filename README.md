@@ -25,6 +25,9 @@ The dev server launches at [http://localhost:5173](http://localhost:5173) with h
 ### Anti-taps fantasma en cambios de pantalla
 Se añade `src/input/inputGate.ts`. Tras cada transición de pantalla se llama a `armAfterScreenChange()`, que bloquea `pointerdown/click` hasta que ocurre el primer `pointerup`. Así evitamos que un toque sostenido active botones de la nueva pantalla.
 
+### Control inmediato al iniciar el juego
+Se implementa un traspaso del “toque en curso” del usuario al canvas del juego. Si el jugador pulsa Start sin levantar el dedo, al entrar en gameplay se inyecta un `pointerdown` sobre el canvas y la nave responde al instante. El gate anti-ghost-click solo se usa en transiciones hacia pantallas con UI (ej: menú).
+
 ### Linting
 
 ```bash
