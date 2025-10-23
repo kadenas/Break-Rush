@@ -36,13 +36,12 @@ export function ensureGameOverDOM(h: GameOverHandlers) {
 
   const retry = document.getElementById('go-retry') as HTMLButtonElement;
   btnShare = document.getElementById('go-share') as HTMLButtonElement;
-  const menu  = document.getElementById('go-menu')  as HTMLButtonElement;
+  const menu = document.getElementById('go-menu') as HTMLButtonElement;
 
   retry.addEventListener('click', h.onRetry);
   menu.addEventListener('click', h.onMenu);
 
-  // Handler de Share con “debounce” y deshabilitado temporal
-  btnShare.addEventListener('click', async (ev) => {
+  btnShare.addEventListener('pointerup', async (ev) => {
     ev.preventDefault();
     ev.stopPropagation();
     if (!btnShare || btnShare.disabled) return;
@@ -52,8 +51,9 @@ export function ensureGameOverDOM(h: GameOverHandlers) {
     try {
       await shareScore(pts);
     } finally {
-      // reactivamos tras un breve colchón para evitar dobles aperturas
-      setTimeout(() => { if (btnShare) btnShare.disabled = false; }, 800);
+      setTimeout(() => {
+        if (btnShare) btnShare.disabled = false;
+      }, 800);
     }
   });
 }
@@ -61,7 +61,6 @@ export function ensureGameOverDOM(h: GameOverHandlers) {
 export function showGameOver(points: number, rankText: string) {
   if (!root) return;
 
-  // Armamos el gate ANTES de abrir la pantalla para obligar a levantar el dedo
   armAfterScreenChange();
 
   if (elScore) {
