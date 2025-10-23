@@ -1,0 +1,87 @@
+/* src/styles/gameover.css */
+
+/* Contenedor de la pantalla Game Over (a pantalla completa encima del canvas) */
+#gameover-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: none;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(2px);
+}
+
+#gameover-screen.is-open {
+  display: flex;
+}
+
+/* Layout: cabecera y contenido arriba, botones abajo */
+#gameover-screen .go-wrap {
+  margin: auto;
+  width: min(92vw, 720px);
+  height: min(92vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 0; /* gestionamos separaciones por secciones */
+  color: #fff;
+}
+
+/* Zona superior con título y rango/puntuación */
+#gameover-screen .go-head {
+  padding: clamp(16px, 3vh, 28px) clamp(16px, 3vw, 28px) 0;
+}
+
+#gameover-screen .go-title {
+  margin: 0 0 clamp(8px, 1.6vh, 14px) 0;
+  font-size: clamp(1.6rem, 4.8vw, 2.4rem);
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  letter-spacing: 0.5px;
+}
+
+/* Rango total / puntuación: subirlo y dar margen inferior grande para no chocar */
+#gameover-screen .go-stats {
+  text-align: center;
+  font-size: clamp(1rem, 3.2vw, 1.25rem);
+  line-height: 1.4;
+  margin: 0 auto;
+  padding: 0 clamp(8px, 2vw, 16px);
+}
+
+/* Empuje adicional: separa claramente de los botones */
+#gameover-screen .go-spacer {
+  flex: 1 1 auto;
+}
+
+/* Footer de botones fijo dentro del modal */
+#gameover-screen .go-actions {
+  display: flex;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 16px);
+  padding: clamp(12px, 2.2vh, 18px) clamp(12px, 3vw, 22px);
+  padding-bottom: calc(clamp(12px, 2.2vh, 18px) + env(safe-area-inset-bottom));
+}
+
+#gameover-screen .go-btn {
+  appearance: none;
+  border: none;
+  border-radius: 12px;
+  padding: 0.8rem 1.2rem;
+  font-size: clamp(1rem, 2.8vw, 1.15rem);
+  font-weight: 700;
+  color: #fff;
+  background: #2563eb;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+#gameover-screen .go-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+#gameover-screen .go-btn:active { transform: translateY(1px) scale(0.98); }
+
+/* Compactar en pantallas bajas en apaisado */
+@media (orientation: landscape) and (max-height: 420px) {
+  #gameover-screen .go-title { font-size: clamp(1.2rem, 4vw, 1.6rem); }
+  #gameover-screen .go-actions { gap: 8px; }
+  #gameover-screen .go-btn { padding: 0.6rem 0.9rem; }
+}

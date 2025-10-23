@@ -1,11 +1,12 @@
 import { computeLayout } from './engine/viewport';
 import { initInput } from './engine/input';
 import { initControls } from './engine/controls';
-import { bootGame, requestMenuStart, requestMenuSettings } from './core/game';
+import { bootGame, requestMenuStart, requestMenuSettings, requestMenuReturn, getGameOverInfo } from './core/game';
 import { installGlobalErrorOverlay, errorBanner } from './boot/errorOverlay';
 import { preloadMenuBackground, showMainMenu, hideMainMenu } from './ui/menu';
 import { armAfterScreenChange, handOffActivePointerTo } from './input/inputGate';
 import { onStateChange, getState } from './core/state';
+import { ensureGameOverDOM, showGameOver, hideGameOver } from './ui/gameOver';
 
 const loadMenuBackground = (() => {
   let promise: Promise<void> | null = null;
@@ -44,6 +45,19 @@ window.addEventListener('DOMContentLoaded', ()=>{
     initControls(canvas);
     bootGame(canvas);
 
+    ensureGameOverDOM({
+      onRetry: () => {
+        hideGameOver();
+        requestMenuStart();
+        handOffActivePointerTo(canvas);
+      },
+      onMenu: () => {
+        hideGameOver();
+        requestMenuReturn();
+        armAfterScreenChange();
+      },
+    });
+
     const menuHandlers = {
       onStart: () => {
         hideMainMenu();
@@ -80,8 +94,14 @@ window.addEventListener('DOMContentLoaded', ()=>{
             showMenuOverlay();
           }
         });
+        hideGameOver();
+      } else if (state === 'gameover') {
+        hideMainMenu();
+        const { points, rankText } = getGameOverInfo();
+        showGameOver(points, rankText);
       } else {
         hideMainMenu();
+        hideGameOver();
       }
     });
 
