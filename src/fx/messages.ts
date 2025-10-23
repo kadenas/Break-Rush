@@ -8,29 +8,22 @@ const RECENT_SIZE = 4;  // evitemos repetir de los últimos 4
 
 // Pool general (sin "Subidón")
 type Phrase = { text: string; weight: number };
-const CHOICES: Phrase[] = [
+export const messages: Phrase[] = [
   { text: '¡Genial!', weight: 3 },
-  { text: '¡Perfecto!', weight: 2 },
-  { text: '¡Muy bien!', weight: 2 },
-  { text: '¡Imparable!', weight: 2 },
+  { text: '¡Muy bien!', weight: 3 },
   { text: '¡Vas fino!', weight: 2 },
-  { text: '¡Crack!', weight: 2 },
-  { text: '¡Seguimos!', weight: 2 },
-  { text: '¡De fábula!', weight: 1 },
-  { text: '¡Fabuloso!', weight: 1 },
+  { text: '¡Crack!', weight: 3 },
+  { text: '¡Capibara!', weight: 2 },
   { text: '¡A tope!', weight: 2 },
-  { text: '¡Fiera!', weight: 1 },
-  { text: '¡Máquina!', weight: 1 },
-  { text: '¡Animal!', weight: 1 },
+  { text: '¡Fiera!', weight: 3 },
+  { text: '¡Máquina!', weight: 2 },
+  { text: '¡Animal!', weight: 2 },
   { text: '¡Vas en la llama!', weight: 1 },
   { text: '¡León!', weight: 1 },
-  { text: '¡Plus ultra!', weight: 1 },
-  { text: '¡Excavadora!', weight: 1 },
-  { text: '¡Champion!', weight: 1 },
-  { text: '¡Fenómeno!', weight: 1 },
-  { text: '¡Fastuoso!', weight: 1 },
+  { text: '¡Excavadora!', weight: 2 },
+  { text: '¡Eres un fenómeno!', weight: 3 },
   { text: '¡Estamos orgullosos!', weight: 1 },
-  { text: '¡Mastodonte!', weight: 1 },
+  { text: '¡Mastodonte!', weight: 2 },
 ];
 
 // Pool específico para hito
@@ -85,7 +78,7 @@ export function maybeSpawnAuto() {
   if (cooldown > 0) return;
   // próxima ventana
   cooldown = randGap(MIN_GAP, MAX_GAP);
-  spawnMessage(pickWeighted(CHOICES));
+  spawnMessage(pickWeighted(messages));
 }
 
 export function spawnMilestoneMessage() {
@@ -96,7 +89,7 @@ export function spawnMilestoneMessage() {
 
 export function spawnMessage(text?: string) {
   const msg: Msg = {
-    text: text || pickWeighted(CHOICES),
+    text: text || pickWeighted(messages),
     x: VW * (0.35 + Math.random() * 0.3),
     y: VH * (0.25 + Math.random() * 0.25),
     t: 0,
