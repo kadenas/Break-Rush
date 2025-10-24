@@ -85,6 +85,11 @@
   transition: transform 0.12s ease, filter 0.12s ease;
 }
 
+#gameover-screen .go-btn.is-armed {
+  outline: 3px solid rgba(255,255,255,0.8);
+  filter: brightness(1.1);
+}
+
 #gameover-screen .go-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
 #gameover-screen .go-btn:active { transform: translateY(1px) scale(0.98); }
 

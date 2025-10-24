@@ -1,5 +1,6 @@
 import { getGameBounds } from './bounds';
 import { createAsteroid, AsteroidSpawnOpts } from '../entities/asteroid';
+import { clampXByRadius } from './spawnUtils';
 
 export type PatternContext = {
   speedMul: number;
@@ -27,19 +28,20 @@ export function spawnWallPattern(ctx: PatternContext): {
   gapHeightPx: number;
 } {
   const { width } = getGameBounds();
+  const widthPx = Math.floor(width);
 
   const playerW = Math.max(24, Math.floor(ctx.playerWidthPx ?? 36));
   const safety = Math.max(8, Math.floor(ctx.gapSafetyPx ?? 12));
   const minGapPx = playerW + 2 * safety;
 
-  let cols = Math.max(6, Math.round(width / 60));
-  let colW = width / cols;
+  let cols = Math.max(6, Math.round(widthPx / 60));
+  let colW = Math.max(1, Math.floor(widthPx / cols));
 
   // Asegurar hueco mínimo en columnas enteras
   let gapCols = Math.ceil(minGapPx / colW);
   while (cols - gapCols < 2 && cols > 4) {
     cols -= 1;
-    colW = width / cols;
+    colW = Math.max(1, Math.floor(widthPx / cols));
     gapCols = Math.ceil(minGapPx / colW);
   }
 
@@ -61,8 +63,8 @@ export function spawnWallPattern(ctx: PatternContext): {
     if (c >= gapStartCol && c < gapStartCol + gapWidthCols) continue;
 
     const cellX0 = c * colW;
-    const cellX1 = (c + 1) * colW;
-    const xCenter = cellX0 + colW * 0.5;
+    const cellX1 = Math.min((c + 1) * colW, widthPx);
+    const xCenter = (cellX0 + cellX1) * 0.5;
 
     // Forzamos SMALL; luego recortamos radio en bordes si es necesario
     let r = Math.floor(Math.random() * (12 - 8 + 1)) + 8; // 8..12
@@ -82,7 +84,7 @@ export function spawnWallPattern(ctx: PatternContext): {
     }
 
     // Clamp final a bordes de pantalla
-    const safeX = clamp(xCenter, r, width - r);
+    const safeX = clampXByRadius(xCenter, r);
 
     const opts: AsteroidSpawnOpts = {
       x: safeX,
@@ -128,7 +130,9 @@ export function spawnDiagonalPattern(ctx: PatternContext): PatternRunner {
         timer -= delayBetween;
         const x = baseX + emitted * dx;
         const y = startY - emitted * 6;
-        ctx.push(createAsteroid({ x, y, vx, vy, speedMul: 1, radius: 14 }));
+        const r = 14;
+        const safeX = clampXByRadius(x, r);
+        ctx.push(createAsteroid({ x: safeX, y, vx, vy, speedMul: 1, radius: r }));
         emitted++;
       }
       return emitted >= count;
@@ -142,8 +146,11 @@ export function spawnTwinClampPattern(ctx: PatternContext): PatternRunner {
   const vy = 200 * ctx.speedMul;
   const vx = 90 * ctx.speedMul;
 
-  const left = createAsteroid({ x: width * 0.15, y, vx: +vx, vy, radius: 16 });
-  const right = createAsteroid({ x: width * 0.85, y, vx: -vx, vy, radius: 16 });
+  const r = 16;
+  const leftX = clampXByRadius(width * 0.15, r);
+  const rightX = clampXByRadius(width * 0.85, r);
+  const left = createAsteroid({ x: leftX, y, vx: +vx, vy, radius: r });
+  const right = createAsteroid({ x: rightX, y, vx: -vx, vy, radius: r });
   ctx.push(left);
   ctx.push(right);
 

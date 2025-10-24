@@ -4,6 +4,7 @@ import { applySpeedModifier, gameDifficulty, getGlobalSpeedMul, getSpeedModifier
 import { playMessage } from '../fx/messages';
 import { activateShield, Player } from './player';
 import { triggerBonusFeedback } from '../fx/feedback';
+import { clampXByRadius } from './spawnUtils';
 
 const ACTIVE_BONUSES: Bonus[] = [];
 let spawnTimer = 0;
@@ -30,9 +31,10 @@ export function updateBonuses(
   if (spawnTimer > 2 && Math.random() < chance) {
     spawnTimer = 0;
     const bounds = getGameBounds();
-    const margin = 20;
-    const x = Math.random() * (bounds.width - margin * 2) + margin;
-    const y = -20;
+    const r = 10;
+    const rawX = Math.random() * (bounds.width - 2 * r) + r;
+    const x = clampXByRadius(rawX, r);
+    const y = -r;
     const bonus = createBonus(x, y, getGlobalSpeedMul());
     ACTIVE_BONUSES.push(bonus);
   }
