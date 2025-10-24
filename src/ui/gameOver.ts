@@ -3,6 +3,7 @@ import { shareScore } from '../share';
 import { armAfterScreenChange } from '../input/inputGate';
 import { setFeedbackEnabled } from '../fx/feedback';
 import { playSound } from '../fx/audio';
+import { makeDoubleTap } from './doubleTap';
 
 type GameOverHandlers = {
   onRetry: () => void;
@@ -40,24 +41,42 @@ export function ensureGameOverDOM(h: GameOverHandlers) {
   btnShare = document.getElementById('go-share') as HTMLButtonElement;
   const menu = document.getElementById('go-menu') as HTMLButtonElement;
 
-  retry.addEventListener('click', h.onRetry);
-  menu.addEventListener('click', h.onMenu);
+  const armFx = (el: HTMLElement) => {
+    el.classList.add('is-armed');
+    el.setAttribute('aria-pressed', 'true');
+  };
+  const disarmFx = (el: HTMLElement) => {
+    el.classList.remove('is-armed');
+    el.removeAttribute('aria-pressed');
+  };
 
-  btnShare.addEventListener('pointerup', async (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (!btnShare || btnShare.disabled) return;
+  makeDoubleTap(
+    retry,
+    () => h.onRetry(),
+    { onArm: armFx, onDisarm: disarmFx },
+  );
+  makeDoubleTap(
+    menu,
+    () => h.onMenu(),
+    { onArm: armFx, onDisarm: disarmFx },
+  );
+  makeDoubleTap(
+    btnShare,
+    async () => {
+      if (!btnShare || btnShare.disabled) return;
 
-    btnShare.disabled = true;
-    const pts = parseInt(elScore?.dataset.points ?? '0', 10) || 0;
-    try {
-      await shareScore(pts);
-    } finally {
-      setTimeout(() => {
-        if (btnShare) btnShare.disabled = false;
-      }, 800);
-    }
-  });
+      btnShare.disabled = true;
+      const pts = parseInt(elScore?.dataset.points ?? '0', 10) || 0;
+      try {
+        await shareScore(pts);
+      } finally {
+        setTimeout(() => {
+          if (btnShare) btnShare.disabled = false;
+        }, 800);
+      }
+    },
+    { onArm: armFx, onDisarm: disarmFx },
+  );
 }
 
 export function showGameOver(points: number, rankText: string) {

@@ -1,4 +1,5 @@
 import { getGameBounds } from '../game/bounds';
+import { clampXByRadius, clampYTopByRadius } from '../game/spawnUtils';
 
 export type AsteroidSize = 'small' | 'medium' | 'large';
 
@@ -42,7 +43,7 @@ function randomBetween(min: number, max: number): number {
 }
 
 export function createAsteroid(opts: AsteroidSpawnOpts = {}): Asteroid {
-  const { width, left = 0, top = 0 } = getGameBounds();
+  const { width } = getGameBounds();
 
   const baseSpeed = randomBetween(BASE_SPEED_MIN, BASE_SPEED_MAX);
   const mul = opts.speedMul ?? 1;
@@ -56,8 +57,10 @@ export function createAsteroid(opts: AsteroidSpawnOpts = {}): Asteroid {
       ? radiusFromSize(opts.size)
       : randomBetween(10, 18);
 
-  const x = opts.x ?? left + randomBetween(0, width);
-  const y = opts.y ?? top - radius;
+  const rawX = typeof opts.x === 'number' ? opts.x : randomBetween(0, width);
+  const rawY = typeof opts.y === 'number' ? opts.y : -radius;
+  const x = clampXByRadius(rawX, radius);
+  const y = clampYTopByRadius(rawY, radius);
   const vx = typeof opts.vx === 'number' ? opts.vx : 0;
   const vy = typeof opts.vy === 'number' ? opts.vy : speed;
 
